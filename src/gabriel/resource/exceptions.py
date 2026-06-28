@@ -27,3 +27,15 @@ class DuplicateResourceError(GabrielError):
 class DuplicateResourceTypeError(GabrielError):
     """Raised when a resource type is registered more than once."""
     pass
+
+class ResourceFactoryError(GabrielError):
+    """Raised when resource creation fails."""
+    pass
+
+class ResourceValidationError(GabrielError):
+    """Raised when resource validation fails."""
+    pass
+
+class ResourceSerializationError(GabrielError):
+    """Raised when resource serialization/deserialization fails."""
+    pass

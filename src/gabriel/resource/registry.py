@@ -1,40 +1,201 @@
-from dataclasses import dataclass, field
-from gabriel.resource.models import ResourceType
+"""Resource registry that maintains the Universal Resource Model.
+
+Gabriel needs to know every resource type that exists:
+- What it is (descriptor)
+- How to validate it (validator)
+- How to create it (factory)
+- How to serialize it (serializer)
+- What lifecycle it follows (lifecycle)
+- What capabilities it exposes (descriptor)
+
+This registry is the single source of truth for resource metadata.
+"""
+from typing import Any, Type
+
+from gabriel.resource.descriptor import ResourceDescriptor
+from gabriel.resource.validators import ResourceValidator
+from gabriel.resource.serializer import ResourceSerializer
 from gabriel.resource.exceptions import (
     ResourceTypeNotRegisteredError,
     DuplicateResourceTypeError,
 )
 
-@dataclass
-class ResourceTypeDefinition:
-    resource_type: ResourceType
-    description: str
-    schema_version: str = "1.0"
-    tags: list[str] = field(default_factory=list)
 
-class TypeRegistry:
+class ResourceRegistry:
+    """Central registry for all resource types in Gabriel.
+    
+    Gabriel's Universal Resource Model: Everything that exists is a resource,
+    and every resource type is registered here with complete metadata.
+    
+    No if/else chains — everything is data-driven.
+    """
+    
     def __init__(self) -> None:
-        self._registry: dict[ResourceType, ResourceTypeDefinition] = {}
+        """Initialize empty registry."""
+        self._descriptors: dict[str, ResourceDescriptor] = {}
+        self._validators: dict[str, ResourceValidator] = {}
+        self._serializers: dict[str, ResourceSerializer] = {}
+    
+    def register(
+        self,
+        descriptor: ResourceDescriptor,
+    ) -> None:
+        """Register a new resource type.
+        
+        Args:
+            descriptor: Complete metadata about the resource type.
+            
+        Raises:
+            DuplicateResourceTypeError: If type already registered.
+        """
+        if descriptor.type_name in self._descriptors:
+            raise DuplicateResourceTypeError(
+                f"Resource type '{descriptor.type_name}' is already registered"
+            )
+        
+        # Store descriptor
+        self._descriptors[descriptor.type_name] = descriptor
+        
+        # Create and store validator
+        self._validators[descriptor.type_name] = ResourceValidator(descriptor)
+        
+        # Create and store serializer
+        self._serializers[descriptor.type_name] = ResourceSerializer(descriptor)
+    
+    def register_from_class(
+        self,
+        model_class: Type,
+        lifecycle_class: Type,
+        version: str = "1.0",
+        description: str = "",
+        capabilities: frozenset[str] | None = None,
+        tags: frozenset[str] | None = None,
+    ) -> ResourceDescriptor:
+        """Register a resource type from a model class (convenience method).
+        
+        Args:
+            model_class: The Pydantic model class.
+            lifecycle_class: The lifecycle manager class.
+            version: Version string (default "1.0").
+            description: Human-readable description.
+            capabilities: Set of capabilities this resource exposes.
+            tags: Optional categorization tags.
+            
+        Returns:
+            The created ResourceDescriptor.
+            
+        Raises:
+            DuplicateResourceTypeError: If type already registered.
+        """
+        # Infer type_name from class name (convert CamelCase to snake_case)
+        type_name = self._camel_to_snake(model_class.__name__)
+        
+        descriptor = ResourceDescriptor(
+            type_name=type_name,
+            version=version,
+            model=model_class,
+            lifecycle_class=lifecycle_class,
+            description=description,
+            capabilities=capabilities or frozenset(),
+            tags=tags or frozenset(),
+        )
+        
+        self.register(descriptor)
+        return descriptor
+    
+    def get_descriptor(self, resource_type: str) -> ResourceDescriptor | None:
+        """Get descriptor for a resource type.
+        
+        Args:
+            resource_type: The type name.
+            
+        Returns:
+            ResourceDescriptor if found, None otherwise.
+        """
+        return self._descriptors.get(resource_type)
+    
+    def get_validator(self, resource_type: str) -> ResourceValidator | None:
+        """Get validator for a resource type.
+        
+        Args:
+            resource_type: The type name.
+            
+        Returns:
+            ResourceValidator if found, None otherwise.
+        """
+        return self._validators.get(resource_type)
+    
+    def get_serializer(self, resource_type: str) -> ResourceSerializer | None:
+        """Get serializer for a resource type.
+        
+        Args:
+            resource_type: The type name.
+            
+        Returns:
+            ResourceSerializer if found, None otherwise.
+        """
+        return self._serializers.get(resource_type)
+    
+    def is_registered(self, resource_type: str) -> bool:
+        """Check if a resource type is registered.
+        
+        Args:
+            resource_type: The type name.
+            
+        Returns:
+            True if registered, False otherwise.
+        """
+        return resource_type in self._descriptors
+    
+    def all_descriptors(self) -> list[ResourceDescriptor]:
+        """Get all registered descriptors.
+        
+        Returns:
+            List of all ResourceDescriptor instances.
+        """
+        return list(self._descriptors.values())
+    
+    def all_types(self) -> list[str]:
+        """Get all registered type names.
+        
+        Returns:
+            List of all resource type names.
+        """
+        return list(self._descriptors.keys())
+    
+    def unregister(self, resource_type: str) -> bool:
+        """Unregister a resource type (mainly for testing).
+        
+        Args:
+            resource_type: The type name.
+            
+        Returns:
+            True if was registered and removed, False otherwise.
+        """
+        if resource_type in self._descriptors:
+            del self._descriptors[resource_type]
+            del self._validators[resource_type]
+            del self._serializers[resource_type]
+            return True
+        return False
+    
+    @staticmethod
+    def _camel_to_snake(name: str) -> str:
+        """Convert CamelCase to snake_case.
+        
+        Args:
+            name: CamelCase string.
+            
+        Returns:
+            snake_case string.
+        """
+        result = []
+        for i, char in enumerate(name):
+            if char.isupper() and i > 0:
+                result.append('_')
+            result.append(char.lower())
+        return ''.join(result)
 
-    def register(self, definition: ResourceTypeDefinition) -> None:
-        """Raises DuplicateResourceTypeError if already registered"""
-        if definition.resource_type in self._registry:
-            raise DuplicateResourceTypeError(f"Resource type {definition.resource_type} is already registered")
-        self._registry[definition.resource_type] = definition
-
-    def get(self, resource_type: ResourceType) -> ResourceTypeDefinition:
-        """Raises ResourceTypeNotRegisteredError if not found"""
-        if resource_type not in self._registry:
-            raise ResourceTypeNotRegisteredError(f"Resource type {resource_type} is not registered")
-        return self._registry[resource_type]
-
-    def all(self) -> list[ResourceTypeDefinition]:
-        """Returns all registered definitions"""
-        return list(self._registry.values())
-
-    def is_registered(self, resource_type: ResourceType) -> bool:
-        """Returns True if the resource type is registered, False otherwise"""
-        return resource_type in self._registry
 
 # Global registry instance
-registry = TypeRegistry()
+registry = ResourceRegistry()
