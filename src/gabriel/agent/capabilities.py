@@ -1,7 +1,11 @@
-"""
-NOTE: This is not PEEL, it is what the agent requests.
-PEEL will later decide which requested capabilities are actually granted.
-"""
+"""Agent capability declaration models."""
 
-class AgentCapabilities:
-    requested: set[str]
+from pydantic import BaseModel, Field
+
+
+class AgentCapabilities(BaseModel):
+    """Requested capabilities. PEEL determines what is granted."""
+
+    requested: set[str] = Field(default_factory=set)
+
+    model_config = {"frozen": True}

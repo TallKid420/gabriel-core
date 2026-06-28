@@ -1,8 +1,13 @@
-"""
-NOTE: Agents delcare what memory they need.
-"""
+"""Memory requirement declarations for agent specifications."""
 
-class MemoryRequirments:
-    read_layers: list[str]
-    write_layers: list[str]
-    retention: str
+from pydantic import BaseModel, Field
+
+
+class MemoryRequirements(BaseModel):
+    """Declares memory layers and retention policy for an agent."""
+
+    read_layers: list[str] = Field(default_factory=list)
+    write_layers: list[str] = Field(default_factory=list)
+    retention: str = "session"
+
+    model_config = {"frozen": True}

@@ -138,6 +138,18 @@ class ResourceRegistry:
             ResourceDescriptor if found, None otherwise.
         """
         return self._descriptors.get(resource_type)
+
+    def get(self, resource_type: str) -> Type | None:
+        """Get the registered model class for a resource type.
+
+        Args:
+            resource_type: The type name.
+
+        Returns:
+            The model class if registered, otherwise None.
+        """
+        descriptor = self.get_descriptor(resource_type)
+        return descriptor.model if descriptor else None
     
     def get_validator(self, resource_type: str) -> ResourceValidator | None:
         """Get validator for a resource type.
