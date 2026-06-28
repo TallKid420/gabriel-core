@@ -32,6 +32,18 @@ class Command(BaseModel):
     organization_id: str
     """The organization context (tenant isolation)."""
 
+    action_name: str | None = None
+    """The action being performed (e.g., 'identity:create_user').
+    
+    Used by PEEL for policy evaluation. If not provided, defaults to command type.
+    """
+
+    target_resource_grn: str | None = None
+    """The resource GRN being targeted by this command.
+    
+    Used by PEEL for policy evaluation. If not provided, defaults to org wildcard.
+    """
+
     issued_at: datetime = Field(default_factory=utcnow)
     """When the command was issued."""
 
