@@ -20,6 +20,10 @@ class ResourceTypeNotRegisteredError(GabrielError):
     """Raised when a resource type has not been registered."""
     pass
 
+class DuplicateResourceError(GabrielError):
+    """Raised when a resource with the same GRN already exists."""
+    pass
+
 class DuplicateResourceTypeError(GabrielError):
     """Raised when a resource type is registered more than once."""
     pass
