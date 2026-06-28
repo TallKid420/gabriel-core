@@ -1,4 +1,5 @@
 """Execution state and lifecycle management."""
+from dataclasses import asdict
 from enum import Enum
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -32,13 +33,34 @@ class ExecutionRequest:
     input: dict
     metadata: dict
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "context": self.context.to_dict(),
+            "agent": self.agent.model_dump(mode="json"),
+            "input": self.input,
+            "metadata": self.metadata,
+        }
+
 
 @dataclass(frozen=True)
 class ExecutionResult:
-    sucess: bool
+    success: bool
     output: dict[str, Any]
     events: list
     metrics: ExecutionMetrics # FIXME
+
+    @property
+    def sucess(self) -> bool:
+        """Backwards-compatible misspelled alias."""
+        return self.success
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "success": self.success,
+            "output": self.output,
+            "events": self.events,
+            "metrics": asdict(self.metrics),
+        }
 
 
 class ExecutionState(str, Enum):
@@ -200,17 +222,27 @@ class AgentExecutor:
     def __init__(self, registry: RuntimeRegistry):
         self.registry = registry
 
+    async def execute(self, request: ExecutionRequest) -> ExecutionResult:
+        runtime_name = request.metadata.get(
+            "runtime",
+            request.agent.specification.runtime,
+        )
+        runtime = self.registry.get(runtime_name)
+        return await runtime.execute(request)
+
     async def run(self, execution: Execution) -> Execution:
         # Transition to running
         execution.transition_to(ExecutionState.RUNNING)
 
         try:
             # Look up the runtime from the agent specification
-            runtime_name = execution.context.metadata.get("runtime", "mock")
-            runtime = self.registry.get(runtime_name)
-
-            # Execute via the contract
-            result = await runtime.execute(execution)
+            request = ExecutionRequest(
+                context=execution.context,
+                agent=execution.context.metadata["agent"],
+                input=execution.context.metadata.get("input", {}),
+                metadata={"runtime": execution.context.metadata.get("runtime", "mock")},
+            )
+            result = await self.execute(request)
 
             # Store result and transition to completed
             execution.result = result

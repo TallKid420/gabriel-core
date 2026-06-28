@@ -31,6 +31,11 @@ class RuntimeNotFoundError(RuntimeError):
     pass
 
 
+class DuplicateRuntimeError(RuntimeError):
+    """Raised when runtime name is already registered."""
+    pass
+
+
 class InvalidExecutionStateError(ExecutionError):
     """Raised when execution state transition is invalid."""
     pass
