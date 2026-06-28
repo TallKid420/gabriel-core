@@ -5,13 +5,40 @@ from datetime import datetime, timezone
 from uuid import UUID
 from typing import Any
 
+from gabriel.agent.models import Agent
 from gabriel.events.event import Event
 from gabriel.runtime.context import ExecutionContext
 from gabriel.runtime.exceptions import InvalidExecutionStateError
+from gabriel.runtime.registry import RuntimeRegistry
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+@dataclass(frozen=True)
+class ExecutionMetrics:
+    duration_ms: float
+    prompt_tokens: int
+    completion_tokens: int
+    tool_calls: int
+    memory_reads: int
+    memory_writes: int
+
+
+@dataclass(frozen=True)
+class ExecutionRequest:
+    context: ExecutionContext
+    agent: Agent
+    input: dict
+    metadata: dict
+
+
+@dataclass(frozen=True)
+class ExecutionResult:
+    sucess: bool
+    output: dict[str, Any]
+    events: list
+    metrics: ExecutionMetrics # FIXME
 
 
 class ExecutionState(str, Enum):
@@ -165,3 +192,33 @@ class Execution:
         """
         end = self.completed_at or utcnow()
         return (end - self.started_at).total_seconds()
+    
+
+class AgentExecutor:
+    """Drives an Execution through a registered AgentRuntime."""
+
+    def __init__(self, registry: RuntimeRegistry):
+        self.registry = registry
+
+    async def run(self, execution: Execution) -> Execution:
+        # Transition to running
+        execution.transition_to(ExecutionState.RUNNING)
+
+        try:
+            # Look up the runtime from the agent specification
+            runtime_name = execution.context.metadata.get("runtime", "mock")
+            runtime = self.registry.get(runtime_name)
+
+            # Execute via the contract
+            result = await runtime.execute(execution)
+
+            # Store result and transition to completed
+            execution.result = result
+            execution.transition_to(ExecutionState.COMPLETED)
+
+        except Exception as e:
+            # Store error and transition to failed
+            execution.error = str(e)
+            execution.transition_to(ExecutionState.FAILED)
+
+        return execution

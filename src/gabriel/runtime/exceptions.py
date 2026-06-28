@@ -26,6 +26,11 @@ class SchedulerError(RuntimeError):
     pass
 
 
+class RuntimeNotFoundError(RuntimeError):
+    """Raised when Runtime cannot be found"""
+    pass
+
+
 class InvalidExecutionStateError(ExecutionError):
     """Raised when execution state transition is invalid."""
     pass

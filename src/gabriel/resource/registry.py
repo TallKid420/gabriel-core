@@ -10,7 +10,7 @@ Gabriel needs to know every resource type that exists:
 
 This registry is the single source of truth for resource metadata.
 """
-from typing import Any, Type
+from typing import Type
 
 from gabriel.resource.descriptor import ResourceDescriptor
 from gabriel.resource.validators import ResourceValidator
@@ -38,29 +38,61 @@ class ResourceRegistry:
     
     def register(
         self,
-        descriptor: ResourceDescriptor,
-    ) -> None:
-        """Register a new resource type.
-        
+        descriptor_or_model: ResourceDescriptor | Type,
+        lifecycle_class: Type | None = None,
+        version: str = "1.0",
+        description: str = "",
+        capabilities: frozenset[str] | None = None,
+        tags: frozenset[str] | None = None,
+    ) -> ResourceDescriptor:
+        """Register a resource descriptor or model class.
+
+        This supports both forms:
+        - ``registry.register(ResourceDescriptor(...))``
+        - ``registry.register(Organization)``
+
         Args:
-            descriptor: Complete metadata about the resource type.
-            
+            descriptor_or_model: ResourceDescriptor or model class.
+            lifecycle_class: Lifecycle class when registering a model class.
+            version: Version string for model-class registration.
+            description: Human-readable description.
+            capabilities: Capabilities this resource exposes.
+            tags: Optional tags for categorization.
+
+        Returns:
+            The registered ResourceDescriptor.
+
         Raises:
             DuplicateResourceTypeError: If type already registered.
         """
+        if isinstance(descriptor_or_model, ResourceDescriptor):
+            descriptor = descriptor_or_model
+        else:
+            model_class = descriptor_or_model
+            if lifecycle_class is None:
+                from gabriel.resource.lifecycle import LifecycleManager
+
+                lifecycle_class = LifecycleManager
+
+            descriptor = ResourceDescriptor(
+                type_name=self._camel_to_snake(model_class.__name__),
+                version=version,
+                model=model_class,
+                lifecycle_class=lifecycle_class,
+                description=description,
+                capabilities=capabilities or frozenset(),
+                tags=tags or frozenset(),
+            )
+
         if descriptor.type_name in self._descriptors:
             raise DuplicateResourceTypeError(
                 f"Resource type '{descriptor.type_name}' is already registered"
             )
-        
-        # Store descriptor
+
         self._descriptors[descriptor.type_name] = descriptor
-        
-        # Create and store validator
         self._validators[descriptor.type_name] = ResourceValidator(descriptor)
-        
-        # Create and store serializer
         self._serializers[descriptor.type_name] = ResourceSerializer(descriptor)
+        return descriptor
     
     def register_from_class(
         self,
@@ -87,21 +119,14 @@ class ResourceRegistry:
         Raises:
             DuplicateResourceTypeError: If type already registered.
         """
-        # Infer type_name from class name (convert CamelCase to snake_case)
-        type_name = self._camel_to_snake(model_class.__name__)
-        
-        descriptor = ResourceDescriptor(
-            type_name=type_name,
-            version=version,
-            model=model_class,
+        return self.register(
+            model_class,
             lifecycle_class=lifecycle_class,
+            version=version,
             description=description,
-            capabilities=capabilities or frozenset(),
-            tags=tags or frozenset(),
+            capabilities=capabilities,
+            tags=tags,
         )
-        
-        self.register(descriptor)
-        return descriptor
     
     def get_descriptor(self, resource_type: str) -> ResourceDescriptor | None:
         """Get descriptor for a resource type.
