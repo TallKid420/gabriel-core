@@ -22,11 +22,11 @@ class LangGraphAdapter(AgentRuntime):
             "input": request.input,
             "history": [],
             "model": request.agent.specification.model,
+            "org": request.context.organization,
         }
-        config = {"configurable": {"gabriel_context": request.context}}
 
         # 3. Run the graph
-        raw_result = await runnable.ainvoke(inputs, config=config)
+        raw_result = await runnable.ainvoke(inputs)
 
         # 4. Map to standardized Gabriel result
         steps = len(raw_result.get("history", []))
@@ -57,11 +57,8 @@ class LangGraphAdapter(AgentRuntime):
     async def gabriel_node(
         self,
         state: "_LangGraphState",
-        config: dict[str, Any],
     ) -> "_LangGraphState":
         """A standard node that knows how to talk to Gabriel."""
-        context = config["configurable"]["gabriel_context"]
-
         history = list(state.get("history", []))
         history.append("node_1_complete")
 
@@ -69,7 +66,7 @@ class LangGraphAdapter(AgentRuntime):
             "input": state.get("input", {}),
             "history": history,
             "model": state.get("model", ""),
-            "org": context.organization,
+            "org": state.get("org", ""),
         }
 
 
