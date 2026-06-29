@@ -1,3 +1,15 @@
+[project]
+name = "gabriel-core"
+version = "0.1.0"
+dependencies = [
+	"pydantic",
+	"pytest",
+	"alembic",
+	"sqlalchemy[asyncio]",
+	"asyncpg",
+	"langgraph",
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

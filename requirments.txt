@@ -3,3 +3,4 @@ pytest
 alembic
 sqlalchemy[asyncio] 
 asyncpg
+langgraph

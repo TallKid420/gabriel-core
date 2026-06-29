@@ -24,3 +24,31 @@ class RuntimeRegistry:
         
 # Global instance
 runtime_registry = RuntimeRegistry()
+
+
+def register_default_runtimes(registry: RuntimeRegistry | None = None) -> RuntimeRegistry:
+    """Register built-in runtimes used by Gabriel.
+
+    This keeps registry.py as the single place where platform runtimes are known,
+    while avoiding hard dependency failures when optional adapters are unavailable.
+    """
+    target = registry or runtime_registry
+
+    try:
+        from gabriel.runtime.mock_runtime import MockRuntime
+
+        target.register(MockRuntime())
+    except DuplicateRuntimeError:
+        pass
+
+    try:
+        from gabriel.runtime.adapters.langgraph import LangGraphAdapter
+
+        target.register(LangGraphAdapter())
+    except DuplicateRuntimeError:
+        pass
+    except Exception:
+        # Optional adapters should not prevent core runtime import.
+        pass
+
+    return target
