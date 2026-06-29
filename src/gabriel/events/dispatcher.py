@@ -7,117 +7,116 @@ from gabriel.events.projection import Projection
 from gabriel.events.exceptions import HandlerNotFoundError
 from gabriel.runtime.context import ExecutionContext
 
+import asyncio
+
 
 class Dispatcher:
     """Orchestrates the CQRS flow with optional PEEL authorization.
-    
+
     Flow:
       1. Receive command + context
       2. [PEEL] Authorize action (if PEEL enabled)
       3. Find handler for command.type
       4. Execute handler → get events
       5. Append events to event store
-      6. Notify projections
-    
-    This is the heart of Gabriel's event backbone, now with authorization.
+      6. Notify projections + listeners
     """
 
     def __init__(self, event_store: EventStore, peel=None):
-        """Initialize dispatcher.
-        
-        Args:
-            event_store: The event store to append events to.
-            peel: Optional PEEL instance for authorization. If provided,
-                  every command must be authorized before dispatch.
-        """
         self.event_store = event_store
-        self.peel = peel  # Optional PEEL enforcer
+        self.peel = peel
         self._handlers: dict[str, Handler] = {}
         self._projections: list[Projection] = []
+        self._listeners: list[asyncio.Queue] = []
+
+    # -------------------------------------------------------------------------
+    # Streaming
+    # -------------------------------------------------------------------------
+
+    def subscribe(self) -> asyncio.Queue:
+        """Create a new subscription queue for real-time events."""
+        queue: asyncio.Queue = asyncio.Queue()
+        self._listeners.append(queue)
+        return queue
+
+    def unsubscribe(self, queue: asyncio.Queue) -> None:
+        """Remove a subscription queue."""
+        if queue in self._listeners:
+            self._listeners.remove(queue)
+
+    async def publish(self, event: Event) -> None:
+        """Publish an event directly to all real-time listeners.
+
+        Use this when you want to push an event without going through
+        the full command dispatch cycle (e.g. from a LangGraph node).
+        Does NOT write to the event store or notify projections.
+        """
+        for queue in self._listeners:
+            await queue.put(event)
+
+    # -------------------------------------------------------------------------
+    # Registration
+    # -------------------------------------------------------------------------
 
     def register_handler(self, handler: Handler) -> None:
-        """Register a handler for a command type.
-        
-        Args:
-            handler: The handler to register.
-        """
+        """Register a handler for a command type."""
         self._handlers[handler.command_type] = handler
 
     def register_projection(self, projection: Projection) -> None:
-        """Register a projection to receive events.
-        
-        Args:
-            projection: The projection to register.
-        """
+        """Register a projection to receive events."""
         self._projections.append(projection)
 
-    async def dispatch(self, command: Command, context: ExecutionContext | None = None) -> list[Event]:
-        """Dispatch a command with optional PEEL authorization.
-        
-        1. [PEEL] Authorizes action (if PEEL enabled and context provided)
-        2. Finds handler for command.type
-        3. Executes handler
-        4. Stores events
-        5. Notifies projections
-        
-        Args:
-            command: The command to dispatch.
-            context: ExecutionContext required if PEEL is enabled.
-            
-        Returns:
-            list[Event]: Events emitted by the handler.
-            
+    # -------------------------------------------------------------------------
+    # Core dispatch
+    # -------------------------------------------------------------------------
+
+    async def dispatch(
+        self, command: Command, context: ExecutionContext | None = None
+    ) -> list[Event]:
+        """Dispatch a command through the full CQRS pipeline.
+
         Raises:
             UnauthorizedError: If PEEL denies the action.
             HandlerNotFoundError: If no handler registered for command type.
             CommandValidationError: If command validation fails.
             HandlerExecutionError: If handler fails.
         """
-        # PEEL Step: Authorize if enabled
         if self.peel and context:
             action = command.action_name or command.type
             resource = command.target_resource_grn or f"grn://{command.organization_id}/*"
             await self.peel.authorize(context, action, resource)
-        
-        # 1. Find handler
+
         handler = self._handlers.get(command.type)
         if not handler:
             raise HandlerNotFoundError(
                 f"No handler registered for command type '{command.type}'"
             )
 
-        # 2. Execute handler
         events = await handler.handle(command)
-
-        # 3. Store events
         self.event_store.append_many(events)
 
-        # 4. Notify projections
         for event in events:
             await self._notify_projections(event)
+            await self.publish(event)  # Push to real-time listeners
 
         return events
 
-    async def _notify_projections(self, event: Event) -> None:
-        """Notify all subscribed projections of an event.
-        
-        Args:
-            event: The event to notify projections about.
-        """
-        for projection in self._projections:
-            if event.type in projection.event_types:
-                await projection.handle_event(event)
-
     async def replay_events(self, events: list[Event]) -> None:
-        """Replay events to projections (for rebuilding read models).
-        
-        Args:
-            events: Events to replay.
-        """
-        # Reset projections first
+        """Replay events to projections only (does NOT push to live listeners)."""
         for projection in self._projections:
             await projection.reset()
 
-        # Replay each event
         for event in events:
             await self._notify_projections(event)
+            # Intentionally NOT calling publish() here
+            # Replays rebuild state, they should not stream to live clients
+
+    # -------------------------------------------------------------------------
+    # Internal
+    # -------------------------------------------------------------------------
+
+    async def _notify_projections(self, event: Event) -> None:
+        """Notify registered projections of an event."""
+        for projection in self._projections:
+            if event.type in projection.event_types:
+                await projection.handle_event(event)

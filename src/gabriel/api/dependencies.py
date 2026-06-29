@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import AsyncGenerator, Any
 from uuid import uuid4
 
 from fastapi import HTTPException, Request
@@ -125,6 +125,34 @@ class GatewayService:
 
 	def delete_memory_entry(self, memory_id: str) -> bool:
 		return self.state.memory_entries.pop(memory_id, None) is not None
+
+
+class EventStreamer:
+    """Translates internal Dispatcher events into SSE-formatted strings."""
+
+    def __init__(self, dispatcher: Dispatcher):
+        self.dispatcher = dispatcher
+
+    async def stream_events(self, organization_id: str) -> AsyncGenerator[str, None]:
+        queue = self.dispatcher.subscribe()
+        try:
+            while True:
+                event: Event = await queue.get()
+                if event.organization_id == organization_id:
+                    yield f"data: {event.model_dump_json()}\n\n"
+        finally:
+            self.dispatcher.unsubscribe(queue)
+
+
+def get_current_context(request: Request) -> ExecutionContext:
+    """Alias for get_execution_context — used by streaming endpoints."""
+    return get_execution_context(request)
+
+
+def get_event_streamer(request: Request) -> EventStreamer:
+    """Provides an EventStreamer backed by the app's Dispatcher."""
+    state = get_gateway_state(request)
+    return EventStreamer(state.dispatcher)
 
 
 def _register_handlers(dispatcher: Dispatcher) -> None:

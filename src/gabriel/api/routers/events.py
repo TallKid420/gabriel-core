@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from gabriel.api.dependencies import GatewayService, get_gateway_service
+from gabriel.runtime.context import ExecutionContext
 from gabriel.api.schema import EventListResponse, EventResponse
+from gabriel.api.dependencies import (
+    GatewayService, 
+    get_gateway_service, 
+    get_current_context, 
+)
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -15,8 +20,10 @@ async def get_events(service: GatewayService = Depends(get_gateway_service)) -> 
 
 
 @router.get("/stream")
-async def stream_events() -> dict:
-    raise HTTPException(status_code=501, detail="SSE stream is planned for Milestone 13")
+async def stream_events(
+    context: ExecutionContext = Depends(get_current_context),
+) -> None:
+    raise HTTPException(status_code=501, detail="Event streaming is not implemented yet")
 
 
 @router.get("/{event_id}", response_model=EventResponse)

@@ -1,23 +1,26 @@
 from typing import Any, TypedDict
-
 from langgraph.graph import END, StateGraph
-
 from gabriel.runtime.contract import AgentRuntime
 from gabriel.runtime.execution import ExecutionMetrics, ExecutionRequest, ExecutionResult
+from gabriel.events.dispatcher import Dispatcher
+from gabriel.events.event import Event
+
 
 class LangGraphAdapter(AgentRuntime):
     """Bridges Gabriel's Execution model to LangGraph's Graph model."""
+
+    def __init__(self, dispatcher: Dispatcher):
+        # Inject the Dispatcher so nodes can emit events
+        self.dispatcher = dispatcher
 
     @property
     def name(self) -> str:
         return "langgraph"
 
     async def execute(self, request: ExecutionRequest) -> ExecutionResult:
-        # 1. Compile graph (Milestone: simple linear graph)
         graph = self._build_graph()
         runnable = graph.compile()
 
-        # 2. Inject Gabriel context into config
         inputs: dict[str, Any] = {
             "input": request.input,
             "history": [],
@@ -25,10 +28,16 @@ class LangGraphAdapter(AgentRuntime):
             "org": request.context.organization,
         }
 
-        # 3. Run the graph
-        raw_result = await runnable.ainvoke(inputs)
+        # Pass ExecutionContext into LangGraph config so nodes can access it
+        config = {
+            "configurable": {
+                "gabriel_context": request.context,
+                "gabriel_dispatcher": self.dispatcher,
+            }
+        }
 
-        # 4. Map to standardized Gabriel result
+        raw_result = await runnable.ainvoke(inputs, config=config)
+
         steps = len(raw_result.get("history", []))
         return ExecutionResult(
             success=True,
@@ -57,10 +66,23 @@ class LangGraphAdapter(AgentRuntime):
     async def gabriel_node(
         self,
         state: "_LangGraphState",
+        config: dict,
     ) -> "_LangGraphState":
-        """A standard node that knows how to talk to Gabriel."""
+        """Main node. Emits a NodeCompleted event via the Dispatcher."""
+        context = config["configurable"]["gabriel_context"]
+        dispatcher = config["configurable"]["gabriel_dispatcher"]
+
         history = list(state.get("history", []))
         history.append("node_1_complete")
+
+        # Emit event through the Dispatcher (your event bus)
+        event = Event(
+            type="agent.node_completed",
+            organization_id=context.organization,
+            payload={"node": "gabriel_node"},
+        )
+        
+        await dispatcher.publish(event)
 
         return {
             "input": state.get("input", {}),
