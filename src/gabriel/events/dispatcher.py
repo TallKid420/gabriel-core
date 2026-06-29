@@ -1,28 +1,38 @@
+# src/gabriel/events/dispatcher.py
+
 """Dispatcher: Routes commands to handlers, stores events, updates projections."""
-from gabriel.events.command import Command
-from gabriel.events.event import Event
-from gabriel.events.handler import Handler
-from gabriel.events.event_store import EventStore
-from gabriel.events.projection import Projection
-from gabriel.events.exceptions import HandlerNotFoundError
-from gabriel.runtime.context import ExecutionContext
 
 import asyncio
+
+from gabriel.events.command import Command
+from gabriel.events.event import Event
+from gabriel.events.event_store import EventStore
+from gabriel.events.exceptions import HandlerNotFoundError
+from gabriel.events.handler import Handler
+from gabriel.events.projection import Projection
+from gabriel.runtime.context import ExecutionContext
 
 
 class Dispatcher:
     """Orchestrates the CQRS flow with optional PEEL authorization.
 
-    Flow:
-      1. Receive command + context
-      2. [PEEL] Authorize action (if PEEL enabled)
-      3. Find handler for command.type
-      4. Execute handler → get events
-      5. Append events to event store
-      6. Notify projections + listeners
+    Two event tracks exist and must not be mixed:
+
+    Track 1 — Platform Events (Causal):
+        dispatch(command) → [PEEL] → Handler → Events → EventStore → Projections → Listeners
+        Use for any operation that changes Resource state. These events are permanent.
+
+    Track 2 — Telemetry Events (Ephemeral):
+        publish(event) → Listeners only
+        Use for live UI signals: node progress, token usage, heartbeats, spinners.
+        These events are NOT persisted and do NOT update projections.
+        If no listener is subscribed at the moment of publish(), the event is silently dropped.
+
+    Rule: If an event needs to update a Projection, it MUST go through dispatch().
+          The only way to change read-model state is to record a permanent fact first.
     """
 
-    def __init__(self, event_store: EventStore, peel=None):
+    def __init__(self, event_store: EventStore, peel=None) -> None:
         self.event_store = event_store
         self.peel = peel
         self._handlers: dict[str, Handler] = {}
@@ -30,26 +40,44 @@ class Dispatcher:
         self._listeners: list[asyncio.Queue] = []
 
     # -------------------------------------------------------------------------
-    # Streaming
+    # Track 2 — Telemetry / Ephemeral streaming
     # -------------------------------------------------------------------------
 
     def subscribe(self) -> asyncio.Queue:
-        """Create a new subscription queue for real-time events."""
+        """Register a new real-time listener queue.
+
+        The caller MUST call unsubscribe() when done. Failing to do so
+        will cause the listener list to grow unbounded over time.
+
+        Returns:
+            asyncio.Queue: The queue to read telemetry events from.
+        """
         queue: asyncio.Queue = asyncio.Queue()
         self._listeners.append(queue)
         return queue
 
     def unsubscribe(self, queue: asyncio.Queue) -> None:
-        """Remove a subscription queue."""
+        """Remove a listener queue. Safe to call if the queue is not registered."""
         if queue in self._listeners:
             self._listeners.remove(queue)
 
     async def publish(self, event: Event) -> None:
-        """Publish an event directly to all real-time listeners.
+        """Publish a telemetry event to all live listeners.
 
-        Use this when you want to push an event without going through
-        the full command dispatch cycle (e.g. from a LangGraph node).
-        Does NOT write to the event store or notify projections.
+        This is Track 2 — ephemeral, streaming-only.
+
+        - NOT persisted to the EventStore.
+        - Does NOT notify Projections.
+        - If no listener is subscribed, the event is silently dropped.
+
+        Use this for live UI signals only:
+            - "Agent is thinking..."
+            - "Node completed."
+            - "LLM usage: 50 tokens."
+
+        If the event needs to change Resource state or update a Projection,
+        dispatch a Command instead. publish() must never be used as a
+        shortcut for state mutation.
         """
         for queue in self._listeners:
             await queue.put(event)
@@ -59,15 +87,15 @@ class Dispatcher:
     # -------------------------------------------------------------------------
 
     def register_handler(self, handler: Handler) -> None:
-        """Register a handler for a command type."""
+        """Register a command handler. One handler per command type."""
         self._handlers[handler.command_type] = handler
 
     def register_projection(self, projection: Projection) -> None:
-        """Register a projection to receive events."""
+        """Register a projection to receive events from dispatch()."""
         self._projections.append(projection)
 
     # -------------------------------------------------------------------------
-    # Core dispatch
+    # Track 1 — Platform Events / Full CQRS pipeline
     # -------------------------------------------------------------------------
 
     async def dispatch(
@@ -75,11 +103,25 @@ class Dispatcher:
     ) -> list[Event]:
         """Dispatch a command through the full CQRS pipeline.
 
+        This is Track 1 — causal, persistent, projection-aware.
+
+        Flow:
+            1. [PEEL] Authorize action (if PEEL is configured)
+            2. Resolve handler for command.type
+            3. Execute handler → produce events
+            4. Persist events to EventStore
+            5. Notify registered Projections
+            6. Stream events to live listeners (Track 2 queues)
+
+        Note: dispatch() also streams to listeners so that causal events
+        are visible in the live UI alongside telemetry events. The difference
+        is that causal events are persisted first — they are never ephemeral.
+
         Raises:
             UnauthorizedError: If PEEL denies the action.
-            HandlerNotFoundError: If no handler registered for command type.
+            HandlerNotFoundError: If no handler is registered for command.type.
             CommandValidationError: If command validation fails.
-            HandlerExecutionError: If handler fails.
+            HandlerExecutionError: If the handler raises.
         """
         if self.peel and context:
             action = command.action_name or command.type
@@ -97,26 +139,37 @@ class Dispatcher:
 
         for event in events:
             await self._notify_projections(event)
-            await self.publish(event)  # Push to real-time listeners
+            for queue in self._listeners:
+                await queue.put(event)
 
         return events
 
     async def replay_events(self, events: list[Event]) -> None:
-        """Replay events to projections only (does NOT push to live listeners)."""
+        """Replay a sequence of events to rebuild Projection state.
+
+        Does NOT stream to live listeners — replay is a state reconstruction
+        operation, not a live event feed.
+
+        Raises:
+            TypeError: If a registered Projection does not implement reset().
+                       All Projection subclasses must implement async reset() -> None.
+        """
         for projection in self._projections:
+            if not hasattr(projection, "reset") or not callable(projection.reset):
+                raise TypeError(
+                    f"Projection {type(projection).__name__} does not implement reset(). "
+                    "All Projection subclasses must implement async reset() -> None."
+                )
             await projection.reset()
 
         for event in events:
             await self._notify_projections(event)
-            # Intentionally NOT calling publish() here
-            # Replays rebuild state, they should not stream to live clients
 
     # -------------------------------------------------------------------------
     # Internal
     # -------------------------------------------------------------------------
 
     async def _notify_projections(self, event: Event) -> None:
-        """Notify registered projections of an event."""
         for projection in self._projections:
             if event.type in projection.event_types:
                 await projection.handle_event(event)

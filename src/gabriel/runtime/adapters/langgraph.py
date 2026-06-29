@@ -1,5 +1,11 @@
+# src/gabriel/runtime/adapters/langgraph.py
+
+import time
 from typing import Any, TypedDict
+
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
+
 from gabriel.runtime.contract import AgentRuntime
 from gabriel.runtime.execution import ExecutionMetrics, ExecutionRequest, ExecutionResult
 from gabriel.events.dispatcher import Dispatcher
@@ -7,10 +13,14 @@ from gabriel.events.event import Event
 
 
 class LangGraphAdapter(AgentRuntime):
-    """Bridges Gabriel's Execution model to LangGraph's Graph model."""
+    """Bridges Gabriel's Execution model to LangGraph's StateGraph model.
 
-    def __init__(self, dispatcher: Dispatcher):
-        # Inject the Dispatcher so nodes can emit events
+    The Dispatcher is injected at construction time and passed through
+    LangGraph's config dict to each node. This avoids instance-level
+    mutable state and makes concurrent executions safe.
+    """
+
+    def __init__(self, dispatcher: Dispatcher) -> None:
         self.dispatcher = dispatcher
 
     @property
@@ -28,7 +38,9 @@ class LangGraphAdapter(AgentRuntime):
             "org": request.context.organization,
         }
 
-        # Pass ExecutionContext into LangGraph config so nodes can access it
+        # Pass ExecutionContext and Dispatcher through LangGraph config.
+        # Nodes must read from config — never from adapter instance state —
+        # so that concurrent executions do not interfere with each other.
         config = {
             "configurable": {
                 "gabriel_context": request.context,
@@ -36,15 +48,19 @@ class LangGraphAdapter(AgentRuntime):
             }
         }
 
+        start = time.monotonic()
         raw_result = await runnable.ainvoke(inputs, config=config)
+        duration_ms = (time.monotonic() - start) * 1000.0
 
-        steps = len(raw_result.get("history", []))
         return ExecutionResult(
             success=True,
             output=raw_result,
+            # Events are published to the Dispatcher stream during execution.
+            # They are not collected here. Consumers should subscribe to the
+            # Dispatcher before invoking execute() if they need real-time events.
             events=[],
             metrics=ExecutionMetrics(
-                duration_ms=float(steps),
+                duration_ms=duration_ms,
                 prompt_tokens=0,
                 completion_tokens=0,
                 tool_calls=0,
@@ -66,22 +82,38 @@ class LangGraphAdapter(AgentRuntime):
     async def gabriel_node(
         self,
         state: "_LangGraphState",
-        config: dict,
+        config: RunnableConfig | None = None,
     ) -> "_LangGraphState":
-        """Main node. Emits a NodeCompleted event via the Dispatcher."""
-        context = config["configurable"]["gabriel_context"]
-        dispatcher = config["configurable"]["gabriel_dispatcher"]
+        """Primary execution node. Emits a NodeCompleted event via the Dispatcher.
+
+        Context and Dispatcher are read exclusively from the LangGraph config dict.
+        Never read from adapter instance state — doing so would break concurrent
+        execution safety.
+        """
+        configurable = (config or {}).get("configurable", {})
+        context = configurable.get("gabriel_context")
+        dispatcher = configurable.get("gabriel_dispatcher")
+
+        if context is None:
+            raise ValueError(
+                "gabriel_context is missing from LangGraph config. "
+                "ExecutionContext must be passed via config['configurable']['gabriel_context']."
+            )
+        if dispatcher is None:
+            raise ValueError(
+                "gabriel_dispatcher is missing from LangGraph config. "
+                "Dispatcher must be passed via config['configurable']['gabriel_dispatcher']."
+            )
 
         history = list(state.get("history", []))
         history.append("node_1_complete")
 
-        # Emit event through the Dispatcher (your event bus)
         event = Event(
             type="agent.node_completed",
+            principal_id=str(context.principal.id),
             organization_id=context.organization,
             payload={"node": "gabriel_node"},
         )
-        
         await dispatcher.publish(event)
 
         return {

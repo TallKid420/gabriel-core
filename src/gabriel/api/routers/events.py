@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from gabriel.runtime.context import ExecutionContext
 from gabriel.api.schema import EventListResponse, EventResponse
 from gabriel.api.dependencies import (
     GatewayService, 
+    EventStreamer,
     get_gateway_service, 
     get_current_context, 
+    get_event_streamer,
 )
 
 router = APIRouter(prefix="/events", tags=["Events"])
@@ -22,8 +25,12 @@ async def get_events(service: GatewayService = Depends(get_gateway_service)) -> 
 @router.get("/stream")
 async def stream_events(
     context: ExecutionContext = Depends(get_current_context),
-) -> None:
-    raise HTTPException(status_code=501, detail="Event streaming is not implemented yet")
+    streamer: EventStreamer = Depends(get_event_streamer),
+) -> StreamingResponse:
+    return StreamingResponse(
+        streamer.stream_events(context.organization),
+        media_type="text/event-stream",
+    )
 
 
 @router.get("/{event_id}", response_model=EventResponse)

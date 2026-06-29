@@ -1,7 +1,7 @@
 from gabriel.runtime.contract import AgentRuntime
 from gabriel.runtime.exceptions import RuntimeNotFoundError, DuplicateRuntimeError
-
 from typing import Dict
+
 
 class RuntimeRegistry:
     def __init__(self):
@@ -21,22 +21,36 @@ class RuntimeRegistry:
 
     def all(self) -> Dict[str, AgentRuntime]:
         return dict(self._runtimes)
-        
+
+
 # Global instance
 runtime_registry = RuntimeRegistry()
 
 
-def register_default_runtimes(registry: RuntimeRegistry | None = None) -> RuntimeRegistry:
-    """Register built-in runtimes used by Gabriel.
+def register_default_runtimes(
+    registry: RuntimeRegistry | None = None,
+    dispatcher=None,
+) -> RuntimeRegistry:
+    """Register built-in runtimes into the target registry.
 
-    This keeps registry.py as the single place where platform runtimes are known,
-    while avoiding hard dependency failures when optional adapters are unavailable.
+        Args:
+            registry: Target registry. Defaults to the module-level runtime_registry.
+                    Tests should always pass an explicit registry instance.
+            dispatcher: Dispatcher instance required by LangGraphAdapter.
+                        Must be provided if LangGraph is installed. Passing None
+                        when langgraph is available will raise ValueError.
+
+        Returns:
+            The registry that was populated.
+
+        Notes:
+            DuplicateRuntimeError is suppressed intentionally — calling this function
+            more than once on the same registry is safe and idempotent.
     """
     target = registry or runtime_registry
 
     try:
         from gabriel.runtime.mock_runtime import MockRuntime
-
         target.register(MockRuntime())
     except DuplicateRuntimeError:
         pass
@@ -44,11 +58,17 @@ def register_default_runtimes(registry: RuntimeRegistry | None = None) -> Runtim
     try:
         from gabriel.runtime.adapters.langgraph import LangGraphAdapter
 
-        target.register(LangGraphAdapter())
+        if dispatcher is None:
+            raise ValueError(
+                "Dispatcher must be provided when registering LangGraphAdapter."
+                "Pass dispatcher=<your_dispatcher> to register_default_runtimes()."
+            )
+        
+        target.register(LangGraphAdapter(dispatcher=dispatcher))
     except DuplicateRuntimeError:
         pass
-    except Exception:
-        # Optional adapters should not prevent core runtime import.
+    except ImportError:
+        # langgraph not installed — skip silently, this runtime is optional
         pass
 
     return target
