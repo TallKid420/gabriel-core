@@ -1,8 +1,14 @@
 pydantic
 pytest
+pytest-asyncio
 alembic
 sqlalchemy[asyncio] 
 asyncpg
 langgraph
 fastapi
 uuid7
+python-multipart
+docling
+PyMuPDF
+python-docx
+beautifulsoup4

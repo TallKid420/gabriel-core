@@ -3,6 +3,7 @@
 """Dispatcher: Routes commands to handlers, stores events, updates projections."""
 
 import asyncio
+import inspect
 
 from gabriel.events.command import Command
 from gabriel.events.event import Event
@@ -135,7 +136,9 @@ class Dispatcher:
             )
 
         events = await handler.handle(command)
-        self.event_store.append_many(events)
+        append_result = self.event_store.append_many(events)
+        if inspect.isawaitable(append_result):
+            await append_result
 
         for event in events:
             await self._notify_projections(event)

@@ -2,14 +2,26 @@
 name = "gabriel-core"
 version = "0.1.0"
 dependencies = [
-	"pydantic",
-	"fastapi",
-	"httpx",
-	"pytest",
-	"alembic",
-	"sqlalchemy[asyncio]",
-	"asyncpg",
-	"langgraph",
+        "pydantic",
+        "fastapi",
+        "httpx",
+        "pytest",
+        "alembic",
+        "sqlalchemy[asyncio]",
+        "asyncpg",
+        "langgraph",
+        "python-multipart",
+        "pytest-asyncio",
+]
+
+[project.optional-dependencies]
+# High-fidelity document normalization. The Core ingestion path works without
+# these (plain-text/CSV/HTML fallback); install for PDF/DOCX/OCR fidelity.
+docling = [
+        "docling",
+        "PyMuPDF",
+        "python-docx",
+        "beautifulsoup4",
 ]
 
 [tool.pytest.ini_options]

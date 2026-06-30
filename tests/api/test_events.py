@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from fastapi.testclient import TestClient
+
+from gabriel.api.app import create_app
 from gabriel.api.dependencies import get_event_streamer
 
 
@@ -33,4 +36,28 @@ def test_event_lookup_and_stream_placeholder(client, auth_headers):
 			assert "text/event-stream" in stream.headers["content-type"]
 	finally:
 		client.app.dependency_overrides.pop(get_event_streamer, None)
+
+
+def test_resource_created_survives_app_restart(auth_headers):
+	app_a = create_app()
+	with TestClient(app_a) as client_a:
+		create_response = client_a.post(
+			"/resources",
+			json={
+				"resource_type": "workflow",
+				"resource_id": "restart-proof-resource",
+				"attributes": {"name": "survive-restart"},
+			},
+			headers=auth_headers,
+		)
+		assert create_response.status_code == 201
+		grn = create_response.json()["grn"]
+
+	app_b = create_app()
+	with TestClient(app_b) as client_b:
+		get_response = client_b.get(f"/resources/{grn}", headers=auth_headers)
+		assert get_response.status_code == 200
+		body = get_response.json()
+		assert body["grn"] == grn
+		assert body["attributes"] == {"name": "survive-restart"}
 

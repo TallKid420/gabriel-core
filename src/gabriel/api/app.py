@@ -7,6 +7,7 @@ from gabriel.api.errors import register_exception_handlers
 from gabriel.api.middleware import register_middleware
 from gabriel.api.routers import (
     agents,
+    documents,
     events,
     executions,
     health,
@@ -21,6 +22,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(health.router)
     app.include_router(resources.router)
     app.include_router(agents.router)
+    app.include_router(documents.router)
     app.include_router(memory.router)
     app.include_router(events.router)
     app.include_router(executions.router)

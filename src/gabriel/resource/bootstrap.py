@@ -34,6 +34,17 @@ def register_core_resource_types(target_registry: ResourceRegistry | None = None
             tags=frozenset({"core", "tenancy"}),
         )
 
+    # Register the Document resource type (ingestion target).
+    if not reg.is_registered("document"):
+        from gabriel.document.models import Document
+
+        reg.register(
+            Document,
+            description="Ingested document resource",
+            version="1.0",
+            tags=frozenset({"core", "content"}),
+        )
+
     # Register identity types (Principal, future: User, Agent, etc.)
     from gabriel.identity.bootstrap import register_identity_resource_types
     register_identity_resource_types(reg)

@@ -29,6 +29,8 @@ class ResourceType(str, Enum):
     SOLUTION     = "solution"
     WORKFLOW     = "workflow"
     CONNECTOR    = "connector"
+    DOCUMENT     = "document"
+    FILE         = "file"
 
 class Resource(BaseModel):
     grn: GRN

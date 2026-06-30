@@ -266,7 +266,7 @@ class TestPEEL:
         await peel.authorize(
             execution_context,
             "identity:create",
-            "grn:org:user/alice:1",
+            "grn:test-org:user/alice:1",
         )
 
     @pytest.mark.asyncio
@@ -289,9 +289,9 @@ class TestPEEL:
         peel = PEEL(engine)
 
         requests = [
-            ("read", "grn:org:doc/1:1"),
-            ("write", "grn:org:doc/2:1"),
-            ("delete", "grn:org:doc/3:1"),
+            ("read", "grn:test-org:doc/1:1"),
+            ("write", "grn:test-org:doc/2:1"),
+            ("delete", "grn:test-org:doc/3:1"),
         ]
 
         # Should not raise
@@ -321,9 +321,9 @@ class TestPEEL:
             await peel.authorize(
                 execution_context,
                 "admin:delete",
-                "grn:org:system/config:1",
+                "grn:test-org:system/config:1",
             )
 
         error_msg = str(exc_info.value)
         assert "admin:delete" in error_msg
-        assert "grn:org:system/config:1" in error_msg
+        assert "grn:test-org:system/config:1" in error_msg

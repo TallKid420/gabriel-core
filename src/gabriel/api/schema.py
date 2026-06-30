@@ -102,3 +102,19 @@ class EventResponse(BaseModel):
 
 class EventListResponse(BaseModel):
     items: list[EventResponse]
+
+
+# ---------------------------------------------------------------------------
+# Documents
+# ---------------------------------------------------------------------------
+class DocumentResponse(BaseModel):
+    grn: str
+    resource_type: str = "document"
+    state: str
+    filename: str
+    media_type: str | None = None
+    source_uri: str | None = None
+    content_hash: str | None = None
+    byte_size: int | None = None
+    event_id: str
+    event_type: str
