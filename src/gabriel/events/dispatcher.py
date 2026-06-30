@@ -125,7 +125,7 @@ class Dispatcher:
         """
         if self.peel and context:
             action = command.action_name or command.type
-            resource = command.target_resource_grn or f"grn://{command.organization_id}/*"
+            resource = command.target_resource_grn or f"grn:{command.organization_id}/*"
             await self.peel.authorize(context, action, resource)
 
         handler = self._handlers.get(command.type)

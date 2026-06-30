@@ -15,9 +15,9 @@ class TestPolicyEngine:
     def test_default_deny_empty_policies(self, policy_engine: PolicyEngine):
         """Default deny: no policies means deny everything."""
         request = EvaluationRequest(
-            principal="principal://org/user/alice",
+            principal="principal:org:user/alice",
             action="read",
-            resource="grn://org/doc/123",
+            resource="grn:org:doc/123",
         )
         assert policy_engine.evaluate(request) == Effect.DENY
 
@@ -25,9 +25,9 @@ class TestPolicyEngine:
         """Explicit allow: policy with ALLOW statement allows action."""
         policy_engine.add_policy(allow_all_policy)
         request = EvaluationRequest(
-            principal="principal://org/user/alice",
+            principal="principal:org:user/alice",
             action="read",
-            resource="grn://org/doc/123",
+            resource="grn:org:doc/123",
         )
         assert policy_engine.evaluate(request) == Effect.ALLOW
 
@@ -137,12 +137,12 @@ class TestPolicyEngine:
         ) == Effect.DENY
 
     def test_glob_resource_match(self, policy_engine: PolicyEngine):
-        """Glob pattern matching: grn://org/agent/* matches agents."""
+        """Glob pattern matching: grn:org:agent/*:* matches agents."""
         stmt = PolicyStatement(
             effect=Effect.ALLOW,
             principal_match="*",
             action_match="*",
-            resource_match="grn://org/agent/*",
+            resource_match="grn:org:agent/*:*",
         )
         policy = Policy.create(
             grn=GRN(org_id="org", resource_type=ResourceType.POLICY, resource_id="p1"),
@@ -154,12 +154,12 @@ class TestPolicyEngine:
 
         # Should allow agent resources
         assert policy_engine.evaluate(
-            EvaluationRequest(principal="u1", action="write", resource="grn://org/agent/bot1")
+            EvaluationRequest(principal="u1", action="write", resource="grn:org:agent/bot1:1")
         ) == Effect.ALLOW
 
         # Should deny other resources
         assert policy_engine.evaluate(
-            EvaluationRequest(principal="u1", action="write", resource="grn://org/user/alice")
+            EvaluationRequest(principal="u1", action="write", resource="grn:org:user/alice:1")
         ) == Effect.DENY
 
     def test_evaluate_batch(self, policy_engine: PolicyEngine, allow_all_policy: Policy):
@@ -185,7 +185,7 @@ class TestPolicyEngine:
 
     def test_remove_nonexistent_policy(self, policy_engine: PolicyEngine):
         """Remove policy that doesn't exist returns False."""
-        removed = policy_engine.remove_policy("grn://org/policy/nonexistent")
+        removed = policy_engine.remove_policy("grn:org:policy/nonexistent:1")
         assert removed is False
 
 
@@ -266,7 +266,7 @@ class TestPEEL:
         await peel.authorize(
             execution_context,
             "identity:create",
-            "grn://org/user/alice",
+            "grn:org:user/alice:1",
         )
 
     @pytest.mark.asyncio
@@ -279,7 +279,7 @@ class TestPEEL:
             await peel.authorize(
                 execution_context,
                 "identity:create",
-                "grn://org/user/alice",
+                "grn:org:user/alice:1",
             )
 
     @pytest.mark.asyncio
@@ -289,9 +289,9 @@ class TestPEEL:
         peel = PEEL(engine)
 
         requests = [
-            ("read", "grn://org/doc/1"),
-            ("write", "grn://org/doc/2"),
-            ("delete", "grn://org/doc/3"),
+            ("read", "grn:org:doc/1:1"),
+            ("write", "grn:org:doc/2:1"),
+            ("delete", "grn:org:doc/3:1"),
         ]
 
         # Should not raise
@@ -304,8 +304,8 @@ class TestPEEL:
         peel = PEEL(engine)
 
         requests = [
-            ("read", "grn://org/doc/1"),
-            ("write", "grn://org/doc/2"),
+            ("read", "grn:org:doc/1:1"),
+            ("write", "grn:org:doc/2:1"),
         ]
 
         with pytest.raises(UnauthorizedError):
@@ -321,9 +321,9 @@ class TestPEEL:
             await peel.authorize(
                 execution_context,
                 "admin:delete",
-                "grn://org/system/config",
+                "grn:org:system/config:1",
             )
 
         error_msg = str(exc_info.value)
         assert "admin:delete" in error_msg
-        assert "grn://org/system/config" in error_msg
+        assert "grn:org:system/config:1" in error_msg

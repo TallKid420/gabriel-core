@@ -22,7 +22,7 @@ class TestEvent:
             type="organization_created",
             principal_id="principal://acme/user/alice",
             organization_id="acme",
-            resource_grn="grn://acme/organization/acme",
+            resource_grn="grn:acme:organization/acme:1",
             payload={"display_name": "Acme Corp"},
         )
         assert event.type == "organization_created"
@@ -176,7 +176,7 @@ class TestEventStore:
     def test_events_for_resource(self):
         """Test querying events by resource."""
         store = EventStore()
-        grn = "grn://acme/organization/acme"
+        grn = "grn:acme:organization/acme:1"
         event1 = Event(
             type="organization_created",
             principal_id="principal://acme/user/alice",
@@ -187,7 +187,7 @@ class TestEventStore:
             type="other_event",
             principal_id="principal://acme/user/alice",
             organization_id="acme",
-            resource_grn="grn://other",
+            resource_grn="grn:other:organization/other:1",
         )
         store.append_many([event1, event2])
         org_events = store.events_for_resource(grn)

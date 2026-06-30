@@ -29,6 +29,9 @@ class Principal(BaseModel):
     id: PrincipalID
     """Globally unique identifier for this principal."""
 
+    resource_grn: str | None = None
+    """Optional GRN mirror link to the corresponding User/Agent resource."""
+
     organization_id: str
     """The organization this principal belongs to (tenant isolation)."""
 

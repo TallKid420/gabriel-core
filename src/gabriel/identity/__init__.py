@@ -6,6 +6,7 @@ from gabriel.identity.principal import Principal
 from gabriel.identity.token import Token, TokenPayload
 from gabriel.identity.keys import KeyManager
 from gabriel.identity.auth import TokenService
+from gabriel.identity.bootstrap import register_identity_resource_types
 from gabriel.identity.exceptions import (
     IdentityError,
     InvalidPrincipalIDError,
@@ -27,6 +28,7 @@ __all__ = [
     "TokenPayload",
     "KeyManager",
     "TokenService",
+    "register_identity_resource_types",
     "IdentityError",
     "InvalidPrincipalIDError",
     "PrincipalNotFoundError",

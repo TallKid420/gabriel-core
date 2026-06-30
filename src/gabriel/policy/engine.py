@@ -12,13 +12,13 @@ class EvaluationRequest(BaseModel):
     """
     
     principal: str
-    """Principal GRN attempting the action (e.g., "principal://org/user/alice")."""
+    """Principal GRN attempting the action (e.g., "principal:org:user/alice")."""
     
     action: str
     """Action being attempted (e.g., "identity:create_user", "resource:read")."""
     
     resource: str
-    """Resource GRN being accessed (e.g., "grn://org/agent/123")."""
+    """Resource GRN being accessed (e.g., "grn:org:agent/123")."""
 
 
 class PolicyEngine:
@@ -88,7 +88,7 @@ class PolicyEngine:
         Uses fnmatch for glob-style pattern matching:
         - "*" matches everything
         - "*.txt" matches any .txt file
-        - "grn://org/*" matches any resource in org
+        - "grn:org:*/*:*" matches any resource in org
         
         Args:
             statement: The policy statement.

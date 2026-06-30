@@ -27,7 +27,7 @@ class TestPolicyStatement:
             effect=Effect.ALLOW,
             principal_match="*",
             action_match="read",
-            resource_match="grn://org/doc/*",
+            resource_match="grn:org:doc/*:*",
         )
         assert stmt.effect == Effect.ALLOW
         assert stmt.principal_match == "*"
@@ -108,13 +108,13 @@ class TestPolicy:
         stmts = [
             PolicyStatement(
                 effect=Effect.ALLOW,
-                principal_match="grn://org/user/*",
+                principal_match="grn:org:user/*:*",
                 action_match="read",
                 resource_match="*",
             ),
             PolicyStatement(
                 effect=Effect.DENY,
-                principal_match="grn://org/user/contractor",
+                principal_match="grn:org:user/contractor:*",
                 action_match="admin:*",
                 resource_match="*",
             ),

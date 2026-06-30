@@ -47,7 +47,7 @@ class PEEL:
             UnauthorizedError: If the action is denied by policy.
             
         Example:
-            await peel.authorize(context, "organization:create", "grn://org/org/*")
+            await peel.authorize(context, "organization:create", "grn:org:org/*")
         """
         # Build evaluation request
         request = EvaluationRequest(

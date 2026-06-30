@@ -12,7 +12,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Import all ORM models so their tables are registered on Base.metadata.
 from gabriel.database.base import Base  # noqa: E402
-import gabriel.organization.orm  # noqa: E402, F401  — registers OrganizationORM
+import gabriel.identity.orm  # noqa: E402, F401  # registers PrincipalORM
+import gabriel.organization.orm  # noqa: E402, F401  # registers OrganizationORM
+import gabriel.events.orm  # noqa: E402, F401  # registers EventORM
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

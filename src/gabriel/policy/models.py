@@ -23,7 +23,7 @@ class PolicyStatement(BaseModel):
     
     Statements use glob-style pattern matching:
     - "*" matches everything
-    - "grn://org/*/resource" matches any resource type
+    - "grn:org:*/resource" matches any resource type
     - "identity:*" matches any identity action
     """
     
@@ -31,13 +31,13 @@ class PolicyStatement(BaseModel):
     """What to do if this statement matches: ALLOW or DENY."""
     
     principal_match: str
-    """Pattern to match against principal GRN (e.g., "grn://org/user/*", "*")."""
+    """Pattern to match against principal GRN (e.g., "principal:org:user/*", "*")."""
     
     action_match: str
     """Pattern to match against action (e.g., "identity:create_user", "*")."""
     
     resource_match: str
-    """Pattern to match against resource GRN (e.g., "grn://org/agent/123", "*")."""
+    """Pattern to match against resource GRN (e.g., "grn:org:agent/123", "*")."""
     
     condition: str | None = None
     """Optional condition for future expansion (e.g., time-based, IP-based)."""
@@ -54,7 +54,7 @@ class Policy(Resource):
     
     Example:
         Policy with statements:
-        1. ALLOW grn://org/user/* to call identity:* on grn://org/agent/*
+        1. ALLOW principal:org:user/* to call identity:* on grn:org:agent/*
         2. DENY bad_user to do anything
     """
     

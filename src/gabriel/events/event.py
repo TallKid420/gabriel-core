@@ -33,7 +33,7 @@ class Event(BaseModel):
     """The organization this event belongs to (tenant isolation)."""
 
     resource_grn: str | None = None
-    """The Resource this event concerns (grn://...). Null for org-level events."""
+    """The Resource this event concerns (grn:<org>:<type>/<id>:<version>). Null for org-level events."""
 
     correlation_id: str | None = None
     """Trace ID for correlating related events (e.g., all events from one user request)."""

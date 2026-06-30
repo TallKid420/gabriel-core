@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from uuid import uuid4
+from uuid_extensions import uuid7
 
 from gabriel.resource.exceptions import InvalidGRNError
 
@@ -14,7 +14,7 @@ class GRN:
     any resource within the Gabriel system.
 
     Format:
-        grn://<org_id>/<resource_type>/<resource_id>@<version>
+        grn:<org_id>:<resource_type>/<resource_id>:<version>
 
     Components:
         - org_id:         The owning organization or tenant namespace.
@@ -39,31 +39,27 @@ class GRN:
     def __str__(self) -> str:
         """Return formatted GRN string"""
         return (
-            f"{GRN_SCHEME}://{self.org_id}/"
-            f"{self.resource_type}/{self.resource_id}"
-            f"@{self.version}"
+            f"{GRN_SCHEME}:{self.org_id}:"
+            f"{self.resource_type}/{self.resource_id}:"
+            f"{self.version}"
         )
 
     def __repr__(self) -> str:
         # docs/learned/!r.md
         return f"GRN({str(self)!r})"
-
+    
     @classmethod
-    def parse(cls, raw: str) -> "GRN":
-        """        
-        Parse a GRN of the form:
-            - grn://org_id/resource_type/resource_id@version
+    def _parse_colon(cls, raw: str) -> "GRN":
+        """Parse a GRN of the form:
+            - grn:<org_id>:<resource_type>/<resource_id>:<version>
 
         raise InvalidGRNError if malformed
         """
-        if not raw.startswith(f"{GRN_SCHEME}://"):
-            raise InvalidGRNError(f"Invalid GRN scheme: {raw}")
-
         try:
-            body = raw[len(f"{GRN_SCHEME}://"):]
-
-            path, version_str = body.rsplit("@", 1)
-            org_id, resource_type, resource_id = path.split("/", 2)
+            body = raw[len(f"{GRN_SCHEME}:"):]
+            org_id, remainder = body.split(":", 1)
+            type_and_id, version_str = remainder.rsplit(":", 1)
+            resource_type, resource_id = type_and_id.split("/", 1)
 
             version = int(version_str)
 
@@ -81,17 +77,26 @@ class GRN:
         )
 
     @classmethod
+    def parse(cls, raw: str) -> "GRN":
+        """        
+        Parse a GRN of the form:
+            - grn:<org_id>:<resource_type>/<resource_id>:<version>
+
+        raise InvalidGRNError if malformed
+        """
+        if raw.startswith(f"{GRN_SCHEME}:"):
+            return cls._parse_colon(raw)
+        raise InvalidGRNError(f"Invalid GRN scheme: {raw}")
+    
+    @classmethod
     def generate(cls, org_id: str, resource_type: str) -> "GRN":
         """
         Generate a new GRN.
-
-        TODO: replace uuid4() with uuid7() once Python provides it
-        (or use the uuid6 package).
         """
         
         return cls(
             org_id=org_id,
             resource_type=resource_type,
-            resource_id=str(uuid4()),
+            resource_id=str(uuid7()),
             version=1,
         )
