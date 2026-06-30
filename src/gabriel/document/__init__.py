@@ -13,6 +13,7 @@ This package owns:
 from gabriel.document.models import Document
 from gabriel.document.normalizer import DocumentNormalizer, NormalizationError
 from gabriel.document.service import DocumentIngestionService, IngestedDocument
+from gabriel.document.content_store import ContentStore, DiskContentStore
 
 __all__ = [
     "Document",
@@ -20,4 +21,6 @@ __all__ = [
     "NormalizationError",
     "DocumentIngestionService",
     "IngestedDocument",
+    "ContentStore",
+    "DiskContentStore",
 ]

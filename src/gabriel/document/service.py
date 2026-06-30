@@ -23,6 +23,7 @@ from pathlib import Path
 
 from uuid_extensions import uuid7
 
+from gabriel.document.content_store import ContentStore, DiskContentStore
 from gabriel.document.models import Document
 from gabriel.document.normalizer import DocumentNormalizer
 from gabriel.events.command import Command
@@ -47,9 +48,11 @@ class DocumentIngestionService:
         self,
         dispatcher: Dispatcher,
         normalizer: DocumentNormalizer | None = None,
+        content_store: ContentStore | None = None,
     ) -> None:
         self.dispatcher = dispatcher
         self.normalizer = normalizer or DocumentNormalizer()
+        self.content_store = content_store or DiskContentStore(Path(".gabriel/content"))
 
     async def ingest(
         self,
@@ -91,6 +94,10 @@ class DocumentIngestionService:
                 Path(raw_path).unlink(missing_ok=True)
 
         content_hash = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+        content_pointer = self.content_store.put_text(
+            organization_id=context.organization,
+            content=normalized_text,
+        )
 
         # Mint a GRN within the principal's organization (tenant-scoped).
         resource_id = str(uuid7())
@@ -109,7 +116,7 @@ class DocumentIngestionService:
             media_type=media_type,
             content_hash=content_hash,
             byte_size=byte_size,
-            normalized_text=normalized_text,
+            content_pointer=content_pointer,
             labels=labels,
             metadata=metadata,
         )
@@ -133,6 +140,7 @@ class DocumentIngestionService:
                     "media_type": media_type,
                     "source_uri": document.source_uri,
                     "content_hash": content_hash,
+                    "content_pointer": content_pointer,
                     "byte_size": byte_size,
                 },
             },

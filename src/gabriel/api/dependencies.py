@@ -14,6 +14,7 @@ from gabriel.events import Command, Dispatcher, EventStore, Handler
 from gabriel.events.event import Event
 from gabriel.events.resource_projection import ResourceReadModelProjection
 from gabriel.events.sql_event_store import SqlAlchemyEventStore
+from gabriel.document.content_store import DiskContentStore
 from gabriel.database.base import Base
 from gabriel.database.session import async_session, engine
 from gabriel.policy.engine import PolicyEngine
@@ -242,7 +243,10 @@ def get_document_ingestion_service(request: Request):
         from gabriel.document.service import DocumentIngestionService
 
         state = get_gateway_state(request)
-        return DocumentIngestionService(dispatcher=state.dispatcher)
+        return DocumentIngestionService(
+                dispatcher=state.dispatcher,
+                content_store=DiskContentStore(Path(".gabriel/content")),
+        )
 
 
 def get_execution_context(request: Request) -> ExecutionContext:

@@ -23,13 +23,21 @@ def test_upload_document_creates_resource_and_event(client):
 	assert body["state"] == "active"
 	assert body["event_type"] == "resource_created"
 	assert body["grn"].startswith("grn:acme:document/")
+	assert body["content_pointer"].startswith("disk://acme/documents/")
+	assert body["content_hash"] is not None
 
 	# The ResourceCreated event is visible in the event log.
 	events = client.get("/events", headers=READ_HEADERS).json()["items"]
-	assert any(
-		e["type"] == "resource_created" and e["resource_grn"] == body["grn"]
-		for e in events
+	matching = next(
+		(
+			e for e in events
+			if e["type"] == "resource_created" and e["resource_grn"] == body["grn"]
+		),
+		None,
 	)
+	assert matching is not None
+	assert matching["payload"]["attributes"]["content_pointer"].startswith("disk://acme/documents/")
+	assert "normalized_text" not in matching["payload"]["attributes"]
 
 
 def test_upload_document_denied_without_write_capability(client):
@@ -44,3 +52,5 @@ def test_uploaded_document_is_retrievable(client):
 	got = client.get(f"/documents/{created['grn']}", headers=READ_HEADERS)
 	assert got.status_code == 200
 	assert got.json()["grn"] == created["grn"]
+	assert got.json()["attributes"]["content_pointer"].startswith("disk://acme/documents/")
+	assert "normalized_text" not in got.json().get("attributes", {})

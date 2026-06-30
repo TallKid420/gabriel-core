@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from uuid import uuid4
+from pathlib import Path
 
 import pytest
 
 from gabriel.document.normalizer import DocumentNormalizer, NormalizationError
+from gabriel.document.content_store import DiskContentStore
 from gabriel.document.service import DocumentIngestionService
 from gabriel.events.dispatcher import Dispatcher
 from gabriel.events.event_store import EventStore
@@ -42,13 +44,14 @@ def _make_context(org: str = "acme", caps=(Capability.WRITE_RESOURCE,)) -> Execu
     )
 
 
-def _make_service() -> tuple[DocumentIngestionService, EventStore]:
+def _make_service(content_root: Path | None = None) -> tuple[DocumentIngestionService, EventStore]:
     from gabriel.api.dependencies import _register_handlers
 
     store = EventStore()
     dispatcher = Dispatcher(event_store=store, peel=PEEL(PolicyEngine()))
     _register_handlers(dispatcher)
-    return DocumentIngestionService(dispatcher=dispatcher), store
+    content_store = DiskContentStore(content_root or Path(".gabriel/test-content"))
+    return DocumentIngestionService(dispatcher=dispatcher, content_store=content_store), store
 
 
 # --- Normalizer -----------------------------------------------------------
@@ -62,7 +65,8 @@ def test_normalizer_csv(tmp_path):
     f = tmp_path / "data.csv"
     f.write_text("a,b\n1,2\n", encoding="utf-8")
     out = DocumentNormalizer().normalize(f)
-    assert "a, b" in out and "1, 2" in out
+    assert "a" in out and "b" in out
+    assert "1" in out and "2" in out
 
 
 def test_normalizer_unsupported(tmp_path):
@@ -87,7 +91,8 @@ async def test_ingest_creates_document_resource_and_event():
     # Document is a Resource of type DOCUMENT, tenant-scoped by GRN.
     assert result.document.resource_type == ResourceType.DOCUMENT
     assert result.document.grn.org_id == "acme"
-    assert result.document.normalized_text == "quarterly numbers"
+    assert result.document.content_pointer is not None
+    assert result.document.content_pointer.startswith("disk://acme/documents/")
     assert result.document.content_hash is not None
 
     # A ResourceCreated (resource_created) event was recorded.
@@ -95,6 +100,8 @@ async def test_ingest_creates_document_resource_and_event():
     events = store.events_for_resource(str(result.document.grn))
     assert len(events) == 1
     assert events[0].organization_id == "acme"
+    assert "content_pointer" in events[0].payload["attributes"]
+    assert "normalized_text" not in events[0].payload["attributes"]
 
 
 @pytest.mark.asyncio

@@ -17,8 +17,8 @@ from gabriel.resource.models import Resource, ResourceState, ResourceType
 class Document(Resource):
     """A document that has been ingested into Gabriel.
 
-    The normalized text is referenced by content (or a content pointer in
-    metadata for large blobs). Documents are immutable like all Resources;
+    Normalized text is stored in a content store. The Resource keeps only a
+    pointer and hash metadata. Documents are immutable like all Resources;
     re-ingestion produces a new version.
     """
 
@@ -36,8 +36,8 @@ class Document(Resource):
     byte_size: int | None = None
     """Size of the raw uploaded bytes."""
 
-    normalized_text: str | None = None
-    """Normalized Markdown/plain-text content extracted at ingestion."""
+    content_pointer: str | None = None
+    """Pointer to normalized content in the backing content store."""
 
     @classmethod
     def create(
@@ -50,7 +50,7 @@ class Document(Resource):
         media_type: str | None = None,
         content_hash: str | None = None,
         byte_size: int | None = None,
-        normalized_text: str | None = None,
+        content_pointer: str | None = None,
         labels: dict[str, str] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> "Document":
@@ -67,7 +67,7 @@ class Document(Resource):
             media_type=media_type,
             content_hash=content_hash,
             byte_size=byte_size,
-            normalized_text=normalized_text,
+            content_pointer=content_pointer,
             labels=labels or {},
             metadata=metadata or {},
         )

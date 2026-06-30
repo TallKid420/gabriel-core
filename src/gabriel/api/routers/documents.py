@@ -54,6 +54,7 @@ async def upload_document(
         media_type=document.media_type,
         source_uri=document.source_uri,
         content_hash=document.content_hash,
+        content_pointer=document.content_pointer,
         byte_size=document.byte_size,
         event_id=result.event.id,
         event_type=result.event.type,

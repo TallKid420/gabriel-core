@@ -119,6 +119,7 @@ class DocumentResponse(BaseModel):
     media_type: str | None = None
     source_uri: str | None = None
     content_hash: str | None = None
+    content_pointer: str | None = None
     byte_size: int | None = None
     event_id: str
     event_type: str
