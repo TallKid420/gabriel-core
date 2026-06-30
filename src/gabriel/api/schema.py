@@ -49,6 +49,10 @@ class ResourceDeleteResponse(BaseModel):
     grn: str
 
 
+class ResourceListResponse(BaseModel):
+    items: list[ResourceResponse]
+
+
 # ---------------------------------------------------------------------------
 # Agents
 # ---------------------------------------------------------------------------

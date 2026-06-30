@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from gabriel.events import Command, Dispatcher, EventStore, Handler
 from gabriel.events.event import Event
+from gabriel.events.resource_projection import ResourceReadModelProjection
 from gabriel.events.sql_event_store import SqlAlchemyEventStore
 from gabriel.database.base import Base
 from gabriel.database.session import async_session, engine
@@ -20,6 +21,7 @@ from gabriel.policy.peel import PEEL
 from gabriel.runtime.context import ExecutionContext
 from gabriel.resource.grn import GRN
 import gabriel.events.orm  # noqa: F401
+import gabriel.resource.read_model_orm  # noqa: F401
 
 
 class SimpleCommandHandler(Handler):
@@ -66,6 +68,7 @@ class GatewayState:
         event_store: EventStore | SqlAlchemyEventStore
         dispatcher: Dispatcher
         peel: PEEL
+        resource_projection: ResourceReadModelProjection
         memory_entries: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
@@ -85,36 +88,28 @@ class GatewayService:
                                 return event
                 return None
 
-        def _reconstruct_resource(self, grn: str) -> dict[str, Any] | None:
-                events = self.state.event_store.events_for_resource(grn)
-                if not events:
-                        return None
-
-                state: dict[str, Any] = {"grn": grn}
-                deleted = False
-                for event in events:
-                        if event.type in {"resource_created", "agent_created"}:
-                                state.update(event.payload)
-                                state["state"] = "active"
-                                deleted = False
-                        elif event.type in {"resource_updated", "agent_enabled", "agent_disabled"}:
-                                state.update(event.payload)
-                        elif event.type in {"resource_deleted"}:
-                                deleted = True
-                                state["state"] = "deleted"
-
-                return None if deleted else state
-
         def get_resource(self, grn: str) -> dict[str, Any] | None:
-                return self._reconstruct_resource(grn)
+                return self.state.resource_projection.get_resource(grn)
 
         def get_agent(self, grn: str) -> dict[str, Any] | None:
-                resource = self._reconstruct_resource(grn)
+                resource = self.state.resource_projection.get_resource(grn)
                 if not resource:
                         return None
                 if resource.get("resource_type") != "agent":
                         return None
                 return resource
+
+        def list_resources(
+                self,
+                organization_id: str,
+                resource_type: str | None = None,
+                include_deleted: bool = False,
+        ) -> list[dict[str, Any]]:
+                return self.state.resource_projection.list_resources(
+                        organization_id=organization_id,
+                        resource_type=resource_type,
+                        include_deleted=include_deleted,
+                )
 
         def list_memory(self, organization_id: str) -> list[dict[str, Any]]:
                 return [
@@ -212,10 +207,21 @@ def initialize_gateway_state(app) -> None:
         peel = PEEL(PolicyEngine())
         dispatcher = Dispatcher(event_store=event_store, peel=peel)
         _register_handlers(dispatcher)
+        projection_session_factory = (
+                event_store.session_factory
+                if hasattr(event_store, "session_factory")
+                else async_session
+        )
+        resource_projection = ResourceReadModelProjection(projection_session_factory)
+        dispatcher.register_projection(resource_projection)
+        asyncio.run(resource_projection.bootstrap())
+        if asyncio.run(resource_projection.is_empty()) and event_store.events():
+                asyncio.run(dispatcher.replay_events(event_store.events()))
         app.state.gateway_state = GatewayState(
                 event_store=event_store,
                 dispatcher=dispatcher,
                 peel=peel,
+                resource_projection=resource_projection,
         )
         # Expose PEEL on app.state so the request middleware can perform a coarse
         # authorization pass before routing (defense in depth).

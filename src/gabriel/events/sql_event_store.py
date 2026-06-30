@@ -47,6 +47,11 @@ class SqlAlchemyEventStore:
         self._session_factory = session_factory
         self._events: list[Event] = list(initial_events or [])
 
+    @property
+    def session_factory(self) -> async_sessionmaker[AsyncSession]:
+        """Session factory backing this store (primary DB or fallback)."""
+        return self._session_factory
+
     @classmethod
     async def load_from_db(
         cls,

@@ -6,12 +6,38 @@ from gabriel.api.dependencies import GatewayService, build_command, get_executio
 from gabriel.api.schema import (
     ResourceCreateRequest,
     ResourceDeleteResponse,
+    ResourceListResponse,
     ResourceResponse,
     ResourceUpdateRequest,
 )
 from gabriel.runtime.context import ExecutionContext
 
 router = APIRouter(prefix="/resources", tags=["Resources"])
+
+
+@router.get("", response_model=ResourceListResponse)
+async def list_resources(
+    resource_type: str | None = None,
+    include_deleted: bool = False,
+    context: ExecutionContext = Depends(get_execution_context),
+    service: GatewayService = Depends(get_gateway_service),
+) -> ResourceListResponse:
+    resources = service.list_resources(
+        organization_id=context.organization,
+        resource_type=resource_type,
+        include_deleted=include_deleted,
+    )
+    return ResourceListResponse(
+        items=[
+            ResourceResponse(
+                grn=resource["grn"],
+                resource_type=resource.get("resource_type"),
+                state=resource.get("state"),
+                attributes=resource.get("attributes", {}),
+            )
+            for resource in resources
+        ]
+    )
 
 
 @router.get("/{grn:path}", response_model=ResourceResponse)
