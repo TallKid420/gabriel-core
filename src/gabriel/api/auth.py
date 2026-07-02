@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pydantic import BaseModel
 
-from fastapi import Header
+from fastapi import Response, Request, HTTPException, Header
 
+from gabriel.api.errors import AuthenticationError
 from gabriel.identity.models import Capability, PrincipalStatus, PrincipalType
 from gabriel.identity.principal import Principal
 from gabriel.identity.principal_id import PrincipalID
-
-
-class AuthenticationError(Exception):
-	pass
 
 
 @dataclass(frozen=True)
@@ -73,3 +71,100 @@ def authenticate_bearer_token(
 
 	return AuthenticatedPrincipal(principal=principal, token=token)
 
+# ── Dev Identity Provider ──────────────────────────────────────────────────
+
+DEV_PRINCIPALS = [
+    {
+        "userId": "user_insurance_alice",
+        "displayName": "Alice Chen",
+        "email": "alice@acme-insurance.example",
+        "orgId": "org_insurance",
+        "orgName": "Acme Insurance",
+        "roles": ["admin"],
+        "principal": "principal://org_insurance/user/alice",
+    },
+    {
+        "userId": "user_clothing_bob",
+        "displayName": "Bob Kim",
+        "email": "bob@custom-clothing.example",
+        "orgId": "org_clothing",
+        "orgName": "Custom Clothing Co",
+        "roles": ["member"],
+        "principal": "principal://org_clothing/user/bob",
+    },
+]
+
+class DevLoginRequest(BaseModel):
+    userId: str
+
+async def dev_login(body: DevLoginRequest, response: Response):
+    match = next((p for p in DEV_PRINCIPALS if p["userId"] == body.userId), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Unknown dev principal")
+
+    # Build a session view — same shape the frontend Session type expects
+    session = {
+        "user": {
+            "id": match["userId"],
+            "principal": match["principal"],
+            "displayName": match["displayName"],
+            "email": match["email"],
+            "initials": match["displayName"][0].upper(),
+            "avatarUrl": None,
+            "roles": match["roles"],
+        },
+        "organization": {
+            "id": match["orgId"],
+            "name": match["orgName"],
+            "slug": match["orgId"],
+        },
+        "tenantId": match["orgId"],
+        "authMethod": "dev",
+        "expiresAt": "2099-01-01T00:00:00Z",
+        # The principal token — Gateway will use this in Authorization header
+        # when calling Core on behalf of the user
+        "_principalToken": match["principal"],
+    }
+
+    # Set httpOnly cookie so the browser never sees the token
+    response.set_cookie(
+        key="gabriel_session",
+        value=match["principal"],
+        httponly=True,
+        samesite="lax",
+        max_age=8 * 60 * 60,
+    )
+    return session
+
+async def get_session(request: Request):
+    token = request.cookies.get("gabriel_session")
+    if not token:
+        raise HTTPException(status_code=401, detail="No session")
+
+    # Find matching principal
+    principal_str = token
+    match = next(
+        (p for p in DEV_PRINCIPALS if p["principal"] == principal_str), None
+    )
+    if not match:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    return {
+        "user": {
+            "id": match["userId"],
+            "principal": match["principal"],
+            "displayName": match["displayName"],
+            "email": match["email"],
+            "initials": match["displayName"][0].upper(),
+            "avatarUrl": None,
+            "roles": match["roles"],
+        },
+        "organization": {
+            "id": match["orgId"],
+            "name": match["orgName"],
+            "slug": match["orgId"],
+        },
+        "tenantId": match["orgId"],
+        "authMethod": "dev",
+        "expiresAt": "2099-01-01T00:00:00Z",
+    }

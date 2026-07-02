@@ -200,33 +200,35 @@ async def _build_persisted_event_store() -> SqlAlchemyEventStore:
                 return await SqlAlchemyEventStore.load_from_db(fallback_session)
 
 
-def initialize_gateway_state(app) -> None:
-        event_store = asyncio.run(_build_persisted_event_store())
-        # PEEL is the gatekeeper. It is wired directly into the Dispatcher so that
-        # EVERY state-changing command is authorized (capability + tenant isolation
-        # + explicit policies) before any event is recorded.
-        peel = PEEL(PolicyEngine())
-        dispatcher = Dispatcher(event_store=event_store, peel=peel)
-        _register_handlers(dispatcher)
-        projection_session_factory = (
-                event_store.session_factory
-                if hasattr(event_store, "session_factory")
-                else async_session
-        )
-        resource_projection = ResourceReadModelProjection(projection_session_factory)
-        dispatcher.register_projection(resource_projection)
-        asyncio.run(resource_projection.bootstrap())
-        if asyncio.run(resource_projection.is_empty()) and event_store.events():
-                asyncio.run(dispatcher.replay_events(event_store.events()))
-        app.state.gateway_state = GatewayState(
-                event_store=event_store,
-                dispatcher=dispatcher,
-                peel=peel,
-                resource_projection=resource_projection,
-        )
-        # Expose PEEL on app.state so the request middleware can perform a coarse
-        # authorization pass before routing (defense in depth).
-        app.state.peel = peel
+async def initialize_gateway_state(app) -> None:
+    event_store = await _build_persisted_event_store()
+
+    peel = PEEL(PolicyEngine())
+    dispatcher = Dispatcher(event_store=event_store, peel=peel)
+    _register_handlers(dispatcher)
+
+    projection_session_factory = (
+        event_store.session_factory
+        if hasattr(event_store, "session_factory")
+        else async_session
+    )
+
+    resource_projection = ResourceReadModelProjection(projection_session_factory)
+    dispatcher.register_projection(resource_projection)
+
+    await resource_projection.bootstrap()
+
+    if await resource_projection.is_empty() and event_store.events():
+        await dispatcher.replay_events(event_store.events())
+
+    app.state.gateway_state = GatewayState(
+        event_store=event_store,
+        dispatcher=dispatcher,
+        peel=peel,
+        resource_projection=resource_projection,
+    )
+
+    app.state.peel = peel
 
 
 def get_gateway_state(request: Request) -> GatewayState:

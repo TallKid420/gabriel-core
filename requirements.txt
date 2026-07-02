@@ -7,6 +7,7 @@ asyncpg
 langgraph
 fastapi
 uuid7
+uvicorn
 python-multipart
 docling
 PyMuPDF

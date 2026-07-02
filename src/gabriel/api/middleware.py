@@ -40,6 +40,13 @@ _VERB_BY_METHOD = {
 }
 
 _PUBLIC_PATHS = {"/docs", "/openapi.json", "/redoc"}
+_PUBLIC_PREFIXES = ("/health", "/auth/dev/login", "/auth/session", "/auth/logout")
+
+
+def _is_public_request_path(path: str) -> bool:
+        if path in _PUBLIC_PATHS:
+                return True
+        return any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES)
 
 
 def _derive_authorization(request: Request) -> tuple[str, str] | None:
@@ -116,8 +123,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                                 },
                         )
                 except AuthenticationError:
-                        # Health and documentation endpoints remain public.
-                        if request.url.path.startswith("/health") or request.url.path in _PUBLIC_PATHS:
+                        # Public endpoints bypass bearer-token authentication.
+                        if _is_public_request_path(request.url.path):
                                 return await call_next(request)
                         return JSONResponse(status_code=401, content={"detail": "Unauthorized", "request_id": request_id})
 
@@ -127,7 +134,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 # pass is the primary enforcement point since reads do not dispatch
                 # commands.
                 peel = getattr(request.app.state, "peel", None)
-                if peel is not None and not request.url.path.startswith("/health"):
+                if peel is not None and not _is_public_request_path(request.url.path):
                         authz = _derive_authorization(request)
                         if authz is not None:
                                 action, resource_grn = authz

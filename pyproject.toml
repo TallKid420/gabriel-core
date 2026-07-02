@@ -1,28 +1,29 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "gabriel-core"
 version = "0.1.0"
 dependencies = [
-        "pydantic",
-        "fastapi",
-        "httpx",
-        "pytest",
-        "alembic",
-        "sqlalchemy[asyncio]",
-        "asyncpg",
-        "langgraph",
-        "python-multipart",
-        "pytest-asyncio",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "httpx",
+    "pytest",
+    "pytest-asyncio",
+    "alembic",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "langgraph",
+    "python-multipart",
 ]
 
-[project.optional-dependencies]
-# High-fidelity document normalization. The Core ingestion path works without
-# these (plain-text/CSV/HTML fallback); install for PDF/DOCX/OCR fidelity.
-docling = [
-        "docling",
-        "PyMuPDF",
-        "python-docx",
-        "beautifulsoup4",
-]
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
