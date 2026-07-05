@@ -19,7 +19,7 @@ class GabrielAPIError(Exception):
                 super().__init__(message)
 
 class AuthenticationError(Exception):
-	def __init__(self, message: str, status_code: int = 401) -> None:
+        def __init__(self, message: str, status_code: int = 401) -> None:
                 self.message = message
                 self.status_code = status_code
                 super().__init__(message)
@@ -36,6 +36,14 @@ def register_exception_handlers(app: FastAPI) -> None:
         async def gabriel_api_error_handler(request: Request, exc: GabrielAPIError) -> JSONResponse:
                 return JSONResponse(
                         status_code=exc.status_code,
+                        content=_error_body(request, exc.message),
+                )
+
+        @app.exception_handler(AuthenticationError)
+        async def authentication_error_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
+                # 401 = the request lacks valid authentication credentials.
+                return JSONResponse(
+                        status_code=getattr(exc, "status_code", 401),
                         content=_error_body(request, exc.message),
                 )
 

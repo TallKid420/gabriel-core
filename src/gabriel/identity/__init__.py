@@ -7,6 +7,19 @@ from gabriel.identity.token import Token, TokenPayload
 from gabriel.identity.keys import KeyManager
 from gabriel.identity.auth import TokenService
 from gabriel.identity.bootstrap import register_identity_resource_types
+from gabriel.identity.config import IdentitySettings
+from gabriel.identity.providers import (
+    AuthenticationResult,
+    DevIdentityProvider,
+    IdentityProvider,
+    ProviderRegistry,
+)
+from gabriel.identity.identity_service import (
+    IdentityService,
+    LoginResult,
+    build_default_identity_service,
+    build_key_manager,
+)
 from gabriel.identity.exceptions import (
     IdentityError,
     InvalidPrincipalIDError,
@@ -16,6 +29,9 @@ from gabriel.identity.exceptions import (
     InvalidSignatureError,
     ExpiredTokenError,
     InvalidOrgError,
+    AuthenticationFailedError,
+    ProviderNotFoundError,
+    IdentityConfigurationError,
 )
 
 __all__ = [
@@ -29,6 +45,15 @@ __all__ = [
     "KeyManager",
     "TokenService",
     "register_identity_resource_types",
+    "IdentitySettings",
+    "IdentityProvider",
+    "AuthenticationResult",
+    "DevIdentityProvider",
+    "ProviderRegistry",
+    "IdentityService",
+    "LoginResult",
+    "build_default_identity_service",
+    "build_key_manager",
     "IdentityError",
     "InvalidPrincipalIDError",
     "PrincipalNotFoundError",
@@ -37,4 +62,7 @@ __all__ = [
     "InvalidSignatureError",
     "ExpiredTokenError",
     "InvalidOrgError",
+    "AuthenticationFailedError",
+    "ProviderNotFoundError",
+    "IdentityConfigurationError",
 ]

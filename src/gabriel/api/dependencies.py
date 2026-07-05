@@ -22,6 +22,10 @@ from gabriel.api.services.agents import AgentRepository, AgentService
 from gabriel.api.services.chat import ChatService, ChatRepository
 from gabriel.api.services.notification import NotificationService, NotificationRepository
 
+from gabriel.identity.identity_service import (
+    IdentityService,
+    build_default_identity_service,
+)
 from gabriel.policy.engine import PolicyEngine
 from gabriel.policy.peel import PEEL
 from gabriel.runtime.context import ExecutionContext
@@ -236,6 +240,9 @@ async def initialize_gateway_state(app) -> None:
 
     app.state.peel = peel
 
+    # Identity Service: authentication boundary (issues/verifies signed tokens).
+    app.state.identity_service = build_default_identity_service()
+
 
 def get_gateway_state(request: Request) -> GatewayState:
         return request.app.state.gateway_state
@@ -244,6 +251,10 @@ def get_gateway_state(request: Request) -> GatewayState:
 def get_gateway_service(request: Request) -> GatewayService:
         state = get_gateway_state(request)
         return GatewayService(state)
+
+
+def get_identity_service(request: Request) -> IdentityService:
+        return request.app.state.identity_service
 
 
 def get_agent_service(request: Request) -> AgentService:

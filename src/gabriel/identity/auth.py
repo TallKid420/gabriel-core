@@ -75,6 +75,7 @@ class TokenService:
                 payload,
                 self.key_manager.private_key,
                 algorithm=self.ALGORITHM,
+                headers={"kid": self.key_manager.kid},
             )
 
             return Token(
@@ -105,10 +106,22 @@ class TokenService:
         try:
             token_str = token.value if isinstance(token, Token) else token
 
+            # Select the verification key by the token's `kid` header. This
+            # supports seamless key rotation: tokens signed by a previously
+            # active key still verify while that key remains in the key set.
+            try:
+                header = jwt.get_unverified_header(token_str)
+            except jwt.PyJWTError as exc:
+                raise InvalidSignatureError("Token header is malformed") from exc
+
+            verification_key = self.key_manager.get_verification_key(header.get("kid"))
+            if verification_key is None:
+                raise InvalidSignatureError("Token signed with an unknown key")
+
             # Decode and verify signature
             decoded = jwt.decode(
                 token_str,
-                self.key_manager.public_key,
+                verification_key,
                 algorithms=[self.ALGORITHM],
             )
 
