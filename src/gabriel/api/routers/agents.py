@@ -2,11 +2,48 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from gabriel.api.dependencies import GatewayService, build_command, get_execution_context, get_gateway_service
-from gabriel.api.schema import AgentCreateRequest, AgentExecuteRequest, AgentStateResponse, ResourceResponse
 from gabriel.runtime.context import ExecutionContext
+from gabriel.api.services.agents import AgentService
+from gabriel.api.dependencies import (
+    GatewayService, 
+    build_command, 
+    get_agent_service, 
+    get_execution_context, 
+    get_gateway_service
+)
+from gabriel.api.schema import (
+    AgentCreateRequest,  
+    AgentSummaryResponse, 
+    AgentStateResponse,
+    AgentExecuteRequest,
+    ResourceResponse, 
+    ResourceDeleteResponse
+)
+
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
+
+
+@router.get("", response_model=list[AgentSummaryResponse])
+async def list_agents(
+    context: ExecutionContext = Depends(get_execution_context),
+    service: AgentService = Depends(get_agent_service),
+) -> list[AgentSummaryResponse]:
+    agents = service.list_available_agents(context.principal)
+    return [
+        AgentSummaryResponse(
+            id=agent.id,
+            name=agent.name,
+            description=agent.description,
+            status=agent.status,
+            icon=agent.icon,
+            category=agent.category,
+            provider=agent.provider,
+            model=agent.model,
+            enabled=agent.enabled,
+        )
+        for agent in agents
+    ]
 
 
 @router.post("", response_model=ResourceResponse, status_code=status.HTTP_201_CREATED)
@@ -37,6 +74,21 @@ async def create_agent(
         attributes=created.payload.get("attributes", {}),
     )
 
+@router.delete("/{grn:path}", response_model=ResourceDeleteResponse)
+async def delete_agent(
+    grn: str,
+    context: ExecutionContext = Depends(get_execution_context),
+    service: GatewayService = Depends(get_gateway_service),
+) -> ResourceDeleteResponse:
+    command = build_command(
+        context=context,
+        command_type="delete_agent",
+        payload={"grn": grn},
+        action_name="agent:delete",
+        target_resource_grn=grn,
+    )
+    events = await service.dispatch_command(command, context)
+    return ResourceDeleteResponse(deleted=True, grn=grn)
 
 @router.get("/{grn:path}", response_model=ResourceResponse)
 async def get_agent(

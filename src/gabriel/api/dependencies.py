@@ -17,6 +17,11 @@ from gabriel.events.sql_event_store import SqlAlchemyEventStore
 from gabriel.document.content_store import DiskContentStore
 from gabriel.database.base import Base
 from gabriel.database.session import async_session, engine
+
+from gabriel.api.services.agents import AgentRepository, AgentService
+from gabriel.api.services.chat import ChatService, ChatRepository
+from gabriel.api.services.notification import NotificationService, NotificationRepository
+
 from gabriel.policy.engine import PolicyEngine
 from gabriel.policy.peel import PEEL
 from gabriel.runtime.context import ExecutionContext
@@ -168,6 +173,7 @@ def _register_handlers(dispatcher: Dispatcher) -> None:
                 SimpleCommandHandler("update_resource", "resource_updated"),
                 SimpleCommandHandler("delete_resource", "resource_deleted"),
                 SimpleCommandHandler("create_agent", "agent_created"),
+                SimpleCommandHandler("delete_agent", "agent_deleted"),
                 SimpleCommandHandler("execute_agent", "agent_executed"),
                 SimpleCommandHandler("disable_agent", "agent_disabled"),
                 SimpleCommandHandler("enable_agent", "agent_enabled"),
@@ -239,6 +245,18 @@ def get_gateway_service(request: Request) -> GatewayService:
         state = get_gateway_state(request)
         return GatewayService(state)
 
+
+def get_agent_service(request: Request) -> AgentService:
+        state = get_gateway_state(request)
+        return AgentService(AgentRepository(state.resource_projection))
+
+def get_chat_service(request: Request) -> ChatService:
+        state = get_gateway_state(request)
+        return ChatService(ChatRepository(state.resource_projection))
+
+def get_notification_service(request: Request) -> NotificationService:
+        state = get_gateway_state(request)
+        return NotificationService(NotificationRepository(state.resource_projection))
 
 def get_document_ingestion_service(request: Request):
         """Provide a DocumentIngestionService backed by the app Dispatcher."""

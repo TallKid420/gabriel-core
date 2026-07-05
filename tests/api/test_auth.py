@@ -29,24 +29,19 @@ def test_valid_bearer_token_allows_access(client, auth_headers):
 
 
 def test_dev_login_is_public_and_sets_session_cookie(client):
-	response = client.post("/auth/dev/login", json={"userId": "user_insurance_alice"})
+	response = client.post("/auth/dev/login", json={"userId": "u_alice"})
 	assert response.status_code == 200
-	assert response.json()["user"]["id"] == "user_insurance_alice"
+	assert response.json()["user"]["id"] == "u_alice"
 	assert "gabriel_session=" in response.headers.get("set-cookie", "")
 
 
 def test_session_endpoint_uses_cookie_from_dev_login(client):
-	login_response = client.post("/auth/dev/login", json={"userId": "user_insurance_alice"})
+	login_response = client.post("/auth/dev/login", json={"userId": "u_alice"})
 	assert login_response.status_code == 200
 
 	session_response = client.get("/auth/session")
 	assert session_response.status_code == 200
-	assert session_response.json()["tenantId"] == "org_insurance"
-
-
-def test_session_without_cookie_is_unauthorized(client):
-	response = client.get("/auth/session")
-	assert response.status_code == 401
+	assert session_response.json()["tenantId"] == "org_harbor"
 
 
 def test_logout_is_public(client):

@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
+from dataclasses import dataclass
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +57,33 @@ class ResourceListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Agents
 # ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class AgentSummary:
+    """Summary view of an agent suitable for list pages."""
+
+    id: str
+    name: str
+    description: str | None
+    status: str
+    icon: str | None
+    category: str | None
+    provider: str | None
+    model: str | None
+    enabled: bool
+
+class AgentSummaryResponse(BaseModel):
+    id: str
+    name: str
+    description: str | None = None
+    status: str
+    icon: str | None = None
+    category: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    enabled: bool
+
+
 class AgentCreateRequest(BaseModel):
     name: str
     runtime: str = "mock"
@@ -123,3 +151,70 @@ class DocumentResponse(BaseModel):
     byte_size: int | None = None
     event_id: str
     event_type: str
+
+# ---------------------------------------------------------------------------
+# Chat
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ChatSummary:
+    id: str
+    title: str | None
+    agentGRN: str | None
+    createdAt: datetime | str | None
+    updatedAt: datetime | str | None
+    messageCount: int | None
+    lastMessagePreview: str | None
+
+class ChatSummaryResponse(BaseModel):
+    id: str | None = None
+    title: str | None = None
+    agentGRN: str | None = None
+    createdAt: datetime | str |None = None
+    updatedAt: datetime | str | None = None
+    messageCount: int | None = None
+    lastMessagePreview: str | None = None
+
+class ChatCreateRequest(BaseModel):
+    title: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Optional user-defined title."
+    )
+
+    agentGRN: str | None = Field(
+        default=None,
+        description="Default agent assigned to the conversation."
+    )
+
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Application-defined metadata."
+    )
+
+    # project_grn: str | None = Field(
+    #     default=None,
+    #     description="Optional project this chat belongs to."
+    # )
+
+    # resource_grns: list[str] = Field(
+    #     default_factory=list,
+    #     description="Resources initially attached to the conversation."
+    # )
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
+class Notification(BaseModel):
+    grn: str
+    level: str
+    # organization: str
+    # recipient: str
+    # actor: str | None
+    title: str
+    body: str
+    # source_event: str | None
+    # workflow: str | None
+    created_at: datetime
+    read: bool = False

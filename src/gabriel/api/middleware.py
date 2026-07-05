@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import base64
+import json
+import logging
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, Request
@@ -11,6 +16,65 @@ from starlette.responses import JSONResponse
 from gabriel.api.auth import AuthenticationError, authenticate_bearer_token
 from gabriel.policy.exceptions import UnauthorizedError
 from gabriel.runtime.context import ExecutionContext
+
+
+_REQUEST_LOG_PATH_ENV = "GABRIEL_REQUEST_LOG_PATH"
+_DEFAULT_REQUEST_LOG_PATH = Path(".gabriel") / "requests.log"
+
+
+def _build_request_logger() -> logging.Logger:
+        logger = logging.getLogger("gabriel.api.requests")
+        if logger.handlers:
+                return logger
+
+        configured_path = os.getenv(_REQUEST_LOG_PATH_ENV)
+        log_path = Path(configured_path) if configured_path else _DEFAULT_REQUEST_LOG_PATH
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        handler = logging.FileHandler(log_path, encoding="utf-8")
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        return logger
+
+
+_REQUEST_LOGGER = _build_request_logger()
+
+
+def _encode_request_body(body: bytes) -> tuple[str, str]:
+        try:
+                return body.decode("utf-8"), "utf-8"
+        except UnicodeDecodeError:
+                return base64.b64encode(body).decode("ascii"), "base64"
+
+
+async def _capture_request_body(request: Request) -> bytes:
+        body = await request.body()
+
+        async def receive() -> dict[str, object]:
+                return {"type": "http.request", "body": body, "more_body": False}
+
+        # Replay the same bytes so downstream handlers can still read the body.
+        request._receive = receive  # type: ignore[attr-defined]
+        return body
+
+
+async def _log_incoming_request(request: Request, request_id: str) -> None:
+        body = await _capture_request_body(request)
+        body_text, body_encoding = _encode_request_body(body)
+
+        payload = {
+                "timestamp": _utcnow().isoformat(),
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "query_string": request.url.query,
+                "client": request.client.host if request.client else None,
+                "headers": dict(request.headers),
+                "body": body_text,
+                "body_encoding": body_encoding,
+        }
+        _REQUEST_LOGGER.info(json.dumps(payload, ensure_ascii=True))
 
 
 def _utcnow() -> datetime:
@@ -39,13 +103,29 @@ _VERB_BY_METHOD = {
         "DELETE": "delete",
 }
 
-_PUBLIC_PATHS = {"/docs", "/openapi.json", "/redoc"}
-_PUBLIC_PREFIXES = ("/health", "/auth/dev/login", "/auth/session", "/auth/logout")
+_PUBLIC_PATHS = {
+        "/docs", 
+        "/openapi.json", 
+        "/redoc"
+}
+
+_PUBLIC_PREFIXES = (
+        "/health", 
+        "/auth/dev/login", 
+        "/auth/dev/principals",
+        "/auth/session",
+)
 
 
-def _is_public_request_path(path: str) -> bool:
+def _is_public_request_path(request: Request) -> bool:
+        if request.method == "OPTIONS":
+                return True
+        
+        path = request.url.path
+
         if path in _PUBLIC_PATHS:
                 return True
+        
         return any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES)
 
 
@@ -94,14 +174,19 @@ def _parse_correlation_id(raw: str | None) -> UUID:
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next):
+                if request.method == "OPTIONS":
+                        return await call_next(request)
+
                 request_id = request.headers.get("x-request-id", str(uuid4()))
                 request.state.request_id = request_id
                 request.state.execution_context = None
 
+                await _log_incoming_request(request, request_id)
+
                 try:
                         auth_result = authenticate_bearer_token(
                                 authorization=request.headers.get("authorization"),
-                                x_capabilities=request.headers.get("x-capabilities"),
+                                # x_capabilities=request.headers.get("x-capabilities"), ADR-008 Violation
                                 x_principal_name=request.headers.get("x-principal-name"),
                         )
 
@@ -124,7 +209,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                         )
                 except AuthenticationError:
                         # Public endpoints bypass bearer-token authentication.
-                        if _is_public_request_path(request.url.path):
+                        if _is_public_request_path(request):
                                 return await call_next(request)
                         return JSONResponse(status_code=401, content={"detail": "Unauthorized", "request_id": request_id})
 
@@ -134,7 +219,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 # pass is the primary enforcement point since reads do not dispatch
                 # commands.
                 peel = getattr(request.app.state, "peel", None)
-                if peel is not None and not _is_public_request_path(request.url.path):
+                if peel is not None and not _is_public_request_path(request):
                         authz = _derive_authorization(request)
                         if authz is not None:
                                 action, resource_grn = authz
@@ -154,11 +239,30 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
 
 def register_middleware(app: FastAPI) -> None:
+        app.add_middleware(RequestContextMiddleware)
+
         app.add_middleware(
                 CORSMiddleware,
                 allow_origins=["*"],
+                #         "http://localhost:3000",
+                # ],
                 allow_credentials=True,
-                allow_methods=["*"],
-                allow_headers=["*"],
+                allow_methods=[
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "OPTIONS"
+                ],
+                allow_headers=[
+                        "Authorization",
+                        "Content-Type",
+                        "X-Request-ID",
+                        "X-Capabilities-ID",
+                        "X-Principal-Name",
+                ],
+                expose_headers=[
+                        "X-Request-ID",
+                ],
         )
-        app.add_middleware(RequestContextMiddleware)

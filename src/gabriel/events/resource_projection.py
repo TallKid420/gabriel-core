@@ -17,7 +17,7 @@ class ResourceReadModelProjection(Projection):
 
     _CREATE_EVENTS = {"resource_created", "agent_created"}
     _UPDATE_EVENTS = {"resource_updated", "agent_enabled", "agent_disabled"}
-    _DELETE_EVENTS = {"resource_deleted"}
+    _DELETE_EVENTS = {"resource_deleted", "agent_deleted"}
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
         self._session_factory = session_factory
