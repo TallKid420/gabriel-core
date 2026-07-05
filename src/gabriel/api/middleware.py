@@ -13,7 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from gabriel.api.auth import AuthenticationError, authenticate_bearer_token
+from gabriel.api.auth import (
+    AuthenticationError,
+    authenticate_token,
+    extract_bearer_token,
+)
 from gabriel.policy.exceptions import UnauthorizedError
 from gabriel.runtime.context import ExecutionContext
 
@@ -60,7 +64,14 @@ async def _capture_request_body(request: Request) -> bytes:
 
 
 async def _log_incoming_request(request: Request, request_id: str) -> None:
-        body = await _capture_request_body(request)
+        # Only capture (and replay) the body for methods that actually carry one.
+        # Overriding ``request._receive`` on bodyless requests such as the SSE
+        # ``GET /events/stream`` breaks Starlette's disconnect listener with a
+        # "Unexpected message received: http.request" error.
+        if request.method in ("POST", "PUT", "PATCH"):
+                body = await _capture_request_body(request)
+        else:
+                body = b""
         body_text, body_encoding = _encode_request_body(body)
 
         payload = {
@@ -110,10 +121,16 @@ _PUBLIC_PATHS = {
 }
 
 _PUBLIC_PREFIXES = (
-        "/health", 
-        "/auth/dev/login", 
-        "/auth/dev/principals",
+        "/health",
+        # Auth endpoints that must be reachable without a valid session.
+        "/auth/login",
+        "/auth/logout",
+        "/auth/jwks",
+        "/auth/me",
         "/auth/session",
+        # Backwards-compatible development endpoints.
+        "/auth/dev/login",
+        "/auth/dev/principals",
 )
 
 
@@ -184,11 +201,18 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 await _log_incoming_request(request, request_id)
 
                 try:
-                        auth_result = authenticate_bearer_token(
-                                authorization=request.headers.get("authorization"),
-                                # x_capabilities=request.headers.get("x-capabilities"), ADR-008 Violation
-                                x_principal_name=request.headers.get("x-principal-name"),
-                        )
+                        identity_service = getattr(request.app.state, "identity_service", None)
+                        if identity_service is None:
+                                raise AuthenticationError("Identity service is not initialized")
+
+                        # Accept a signed token from the Authorization header
+                        # (SDK/programmatic clients) or the session cookie (browsers).
+                        token = extract_bearer_token(request.headers.get("authorization"))
+                        if token is None:
+                                cookie_name = identity_service.settings.session_cookie_name
+                                token = request.cookies.get(cookie_name)
+
+                        auth_result = authenticate_token(identity_service, token)
 
                         correlation_id = _parse_correlation_id(request.headers.get("x-correlation-id"))
                         request.state.execution_context = ExecutionContext(
