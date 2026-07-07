@@ -41,6 +41,23 @@ class PEEL:
             engine: The PolicyEngine that will evaluate requests.
         """
         self.engine = engine
+
+    async def evaluate(
+        self,
+        context: ExecutionContext,
+        action: str,
+        resource_grn: str,
+    ) -> Effect:
+        """Return ALLOW or DENY for an action without raising.
+
+        This is useful at the API boundary where middleware needs a simple
+        decision to translate into HTTP status codes and audit events.
+        """
+        try:
+            await self.authorize(context, action, resource_grn)
+        except UnauthorizedError:
+            return Effect.DENY
+        return Effect.ALLOW
     
     async def authorize(
         self,
