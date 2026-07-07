@@ -12,9 +12,12 @@ from gabriel.resource.registry import ResourceRegistry, registry
 from gabriel.resource.factory import ResourceFactory
 from gabriel.resource.bootstrap import register_core_resource_types
 from gabriel.identity.bootstrap import register_identity_resource_types
+from gabriel.agent.models import Agent
+from gabriel.agent.specification import AgentSpecification
 from gabriel.organization.models import Organization
 from gabriel.identity.principal import Principal
 from gabriel.identity.principal_id import PrincipalID
+from gabriel.policy.models import Policy
 from gabriel.identity.models import PrincipalType, PrincipalStatus, Capability
 from gabriel.resource.models import ResourceState
 from gabriel.resource.exceptions import ResourceTypeNotRegisteredError, DuplicateResourceTypeError
@@ -62,6 +65,25 @@ class TestCoreBootstrap:
         assert descriptor.model == Principal
         assert "identity" in descriptor.tags
         assert "core" in descriptor.tags
+
+    def test_register_agent_and_policy_types(self):
+        """Agent and Policy should be registered with valid descriptors."""
+        test_registry = ResourceRegistry()
+        register_core_resource_types(test_registry)
+
+        agent_descriptor = test_registry.get_descriptor("agent")
+        assert agent_descriptor is not None
+        assert agent_descriptor.type_name == "agent"
+        assert agent_descriptor.model == Agent
+        assert "agent:create" in agent_descriptor.capabilities
+        assert "agent:read" in agent_descriptor.capabilities
+
+        policy_descriptor = test_registry.get_descriptor("policy")
+        assert policy_descriptor is not None
+        assert policy_descriptor.type_name == "policy"
+        assert policy_descriptor.model == Policy
+        assert "policy:create" in policy_descriptor.capabilities
+        assert "policy:read" in policy_descriptor.capabilities
 
     def test_identity_bootstrap_standalone(self):
         """Identity bootstrap should work independently."""
@@ -133,6 +155,27 @@ class TestFactoryResourceCreation:
         assert principal.display_name == "Alice"
         assert principal.status == PrincipalStatus.ACTIVE
         assert Capability.AUTHENTICATE in principal.capabilities
+
+    def test_create_agent_through_factory(self, factory):
+        """Agent should be creatable through factory."""
+        from gabriel.resource.grn import GRN
+
+        agent = factory.create(
+            "agent",
+            grn=GRN.generate("acme", "agent"),
+            org_id="acme",
+            created_by="system",
+            specification=AgentSpecification(
+                name="assistant",
+                runtime="langgraph",
+                model="gpt-5.3-codex",
+            ),
+        )
+
+        assert isinstance(agent, Agent)
+        assert agent.resource_type.value == "agent"
+        assert agent.org_id == "acme"
+        assert agent.specification.name == "assistant"
 
     def test_factory_raises_for_unregistered_type(self, factory):
         """Factory should raise for unregistered resource types."""

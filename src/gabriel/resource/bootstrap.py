@@ -54,7 +54,17 @@ def register_core_resource_types(target_registry: ResourceRegistry | None = None
             description="Agent resource",
             version="1.0",
             tags=frozenset({"core", "agent"}),
-            # capabilities=[Capability.AGENT_CREATE, Capability.AGENT_UPDATE, Capability.AGENT_DELETE], # FIXME: Next_Development_Milestones.pdf - Task 1.1
+            capabilities=frozenset(
+                {
+                    "agent:create",
+                    "agent:read",
+                    "agent:update",
+                    "agent:delete",
+                    "agent:execute",
+                    "agent:enable",
+                    "agent:disable",
+                }
+            ),
         )
 
     # Register the Policy resource type (ingestion target).
@@ -66,6 +76,14 @@ def register_core_resource_types(target_registry: ResourceRegistry | None = None
             description="Policy resource",
             version="1.0",
             tags=frozenset({"core", "policy"}),
+            capabilities=frozenset(
+                {
+                    "policy:create",
+                    "policy:read",
+                    "policy:update",
+                    "policy:delete",
+                }
+            ),
         )
 
     # # Register the Notification resource type (ingestion target).
