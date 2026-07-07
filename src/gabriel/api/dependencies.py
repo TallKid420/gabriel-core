@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from gabriel.events import Command, Dispatcher, EventStore, Handler
+from gabriel.events.exceptions import CommandValidationError
 from gabriel.events.event import Event
 from gabriel.events.resource_projection import ResourceReadModelProjection
 from gabriel.events.sql_event_store import SqlAlchemyEventStore
@@ -27,11 +28,15 @@ from gabriel.identity.identity_service import (
     build_default_identity_service,
 )
 from gabriel.policy.engine import PolicyEngine
+from gabriel.policy.models import PolicyStatement
 from gabriel.policy.peel import PEEL
+from gabriel.policy.repository import PolicyRepository
+from gabriel.policy.service import PolicyService
 from gabriel.runtime.context import ExecutionContext
 from gabriel.resource.grn import GRN
 import gabriel.events.orm  # noqa: F401
 import gabriel.resource.read_model_orm  # noqa: F401
+import gabriel.policy.orm  # noqa: F401
 
 
 class SimpleCommandHandler(Handler):
@@ -71,6 +76,87 @@ class SimpleCommandHandler(Handler):
                         metadata=command.metadata,
                 )
                 return [event]
+
+
+class PolicyCommandHandler(Handler):
+        def __init__(
+                self,
+                command_type: str,
+                event_type: str,
+                session_factory: async_sessionmaker[AsyncSession],
+                policy_engine: PolicyEngine,
+        ):
+                self._command_type = command_type
+                self._event_type = event_type
+                self._session_factory = session_factory
+                self._policy_engine = policy_engine
+
+        @property
+        def command_type(self) -> str:
+                return self._command_type
+
+        async def handle(self, command: Command) -> list[Event]:
+                payload = dict(command.payload)
+                target_grn = command.target_resource_grn or payload.get("grn")
+
+                async with self._session_factory() as session:
+                        service = PolicyService(PolicyRepository(session))
+
+                        if self._command_type == "create_policy":
+                                policy = await service.create_policy(
+                                        org_id=command.organization_id,
+                                        created_by=command.principal_id,
+                                        statements=self._parse_statements(payload.get("statements", [])),
+                                        policy_grn=target_grn,
+                                        metadata=payload.get("metadata"),
+                                        labels=payload.get("labels"),
+                                        correlation_id=command.correlation_id,
+                                )
+                                self._policy_engine.add_policy(policy)
+                                resource_grn = str(policy.grn)
+                        elif self._command_type == "update_policy":
+                                if not target_grn:
+                                        raise CommandValidationError("grn is required for update_policy")
+                                policy = await service.update_policy(
+                                        grn_str=target_grn,
+                                        updated_by=command.principal_id,
+                                        statements=self._parse_statements(payload.get("statements", [])),
+                                        correlation_id=command.correlation_id,
+                                )
+                                self._policy_engine.remove_policy(target_grn)
+                                self._policy_engine.add_policy(policy)
+                                resource_grn = str(policy.grn)
+                        elif self._command_type == "delete_policy":
+                                if not target_grn:
+                                        raise CommandValidationError("grn is required for delete_policy")
+                                await service.delete_policy(
+                                        grn_str=target_grn,
+                                        deleted_by=command.principal_id,
+                                        correlation_id=command.correlation_id,
+                                )
+                                self._policy_engine.remove_policy(target_grn)
+                                resource_grn = target_grn
+                        else:
+                                raise CommandValidationError(
+                                        f"Unsupported policy command type: {self._command_type}"
+                                )
+
+                event = Event(
+                        type=self._event_type,
+                        principal_id=command.principal_id,
+                        organization_id=command.organization_id,
+                        resource_grn=resource_grn,
+                        correlation_id=command.correlation_id,
+                        payload=payload,
+                        metadata=command.metadata,
+                )
+                return [event]
+
+        @staticmethod
+        def _parse_statements(raw_statements: Any) -> list[PolicyStatement]:
+                if not isinstance(raw_statements, list):
+                        raise CommandValidationError("statements must be a list")
+                return [PolicyStatement.model_validate(item) for item in raw_statements]
 
 
 @dataclass
@@ -171,7 +257,11 @@ def get_event_streamer(request: Request) -> EventStreamer:
     return EventStreamer(state.dispatcher)
 
 
-def _register_handlers(dispatcher: Dispatcher) -> None:
+def _register_handlers(
+        dispatcher: Dispatcher,
+        session_factory: async_sessionmaker[AsyncSession],
+        policy_engine: PolicyEngine,
+) -> None:
         handlers = [
                 SimpleCommandHandler("create_resource", "resource_created"),
                 SimpleCommandHandler("update_resource", "resource_updated"),
@@ -183,9 +273,33 @@ def _register_handlers(dispatcher: Dispatcher) -> None:
                 SimpleCommandHandler("enable_agent", "agent_enabled"),
                 SimpleCommandHandler("write_memory", "memory_written"),
                 SimpleCommandHandler("delete_memory", "memory_deleted"),
+                PolicyCommandHandler(
+                        "create_policy",
+                        "policy_created",
+                        session_factory,
+                        policy_engine,
+                ),
+                PolicyCommandHandler(
+                        "update_policy",
+                        "policy_updated",
+                        session_factory,
+                        policy_engine,
+                ),
+                PolicyCommandHandler(
+                        "delete_policy",
+                        "policy_deleted",
+                        session_factory,
+                        policy_engine,
+                ),
         ]
         for handler in handlers:
                 dispatcher.register_handler(handler)
+
+
+async def _load_policies(session_factory: async_sessionmaker[AsyncSession]):
+        async with session_factory() as session:
+                service = PolicyService(PolicyRepository(session))
+                return await service.list_policies()
 
 
 async def _build_persisted_event_store() -> SqlAlchemyEventStore:
@@ -211,37 +325,44 @@ async def _build_persisted_event_store() -> SqlAlchemyEventStore:
 
 
 async def initialize_gateway_state(app) -> None:
-    event_store = await _build_persisted_event_store()
+        event_store = await _build_persisted_event_store()
 
-    peel = PEEL(PolicyEngine())
-    dispatcher = Dispatcher(event_store=event_store, peel=peel)
-    _register_handlers(dispatcher)
+        policy_session_factory = (
+                event_store.session_factory
+                if hasattr(event_store, "session_factory")
+                else async_session
+        )
+        persisted_policies = await _load_policies(policy_session_factory)
 
-    projection_session_factory = (
-        event_store.session_factory
-        if hasattr(event_store, "session_factory")
-        else async_session
-    )
+        peel = PEEL(PolicyEngine(persisted_policies))
+        dispatcher = Dispatcher(event_store=event_store, peel=peel)
+        _register_handlers(dispatcher, policy_session_factory, peel.engine)
 
-    resource_projection = ResourceReadModelProjection(projection_session_factory)
-    dispatcher.register_projection(resource_projection)
+        projection_session_factory = (
+                event_store.session_factory
+                if hasattr(event_store, "session_factory")
+                else async_session
+        )
 
-    await resource_projection.bootstrap()
+        resource_projection = ResourceReadModelProjection(projection_session_factory)
+        dispatcher.register_projection(resource_projection)
 
-    if await resource_projection.is_empty() and event_store.events():
-        await dispatcher.replay_events(event_store.events())
+        await resource_projection.bootstrap()
 
-    app.state.gateway_state = GatewayState(
-        event_store=event_store,
-        dispatcher=dispatcher,
-        peel=peel,
-        resource_projection=resource_projection,
-    )
+        if await resource_projection.is_empty() and event_store.events():
+                await dispatcher.replay_events(event_store.events())
 
-    app.state.peel = peel
+        app.state.gateway_state = GatewayState(
+                event_store=event_store,
+                dispatcher=dispatcher,
+                peel=peel,
+                resource_projection=resource_projection,
+        )
 
-    # Identity Service: authentication boundary (issues/verifies signed tokens).
-    app.state.identity_service = build_default_identity_service()
+        app.state.peel = peel
+
+        # Identity Service: authentication boundary (issues/verifies signed tokens).
+        app.state.identity_service = build_default_identity_service()
 
 
 def get_gateway_state(request: Request) -> GatewayState:

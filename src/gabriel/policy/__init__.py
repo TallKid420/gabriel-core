@@ -11,6 +11,9 @@ Implements:
 from gabriel.policy.models import Effect, PolicyStatement, Policy
 from gabriel.policy.engine import PolicyEngine, EvaluationRequest
 from gabriel.policy.peel import PEEL
+from gabriel.policy.orm import PolicyORM
+from gabriel.policy.repository import PolicyRepository
+from gabriel.policy.service import PolicyService
 from gabriel.policy.exceptions import (
     PolicyError,
     UnauthorizedError,
@@ -22,6 +25,9 @@ __all__ = [
     "Effect",
     "PolicyStatement",
     "Policy",
+    "PolicyORM",
+    "PolicyRepository",
+    "PolicyService",
     # Engine
     "PolicyEngine",
     "EvaluationRequest",
