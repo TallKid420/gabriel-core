@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 
 from gabriel.api.dependencies import initialize_gateway_state
 from gabriel.api.errors import register_exception_handlers
@@ -21,17 +21,21 @@ from gabriel.api.routers import (
 )
 
 def register_routers(app: FastAPI) -> None:
+    # Keep health at root for infra probes while versioning all other routes.
     app.include_router(health.router)
-    app.include_router(resources.router)
-    app.include_router(agents.router)
-    app.include_router(documents.router)
-    app.include_router(memory.router)
-    app.include_router(events.router)
-    app.include_router(executions.router)
-    app.include_router(organizations.router)
-    app.include_router(auth.router)
-    app.include_router(chat.router)
-    app.include_router(notifications.router)
+
+    v1 = APIRouter(prefix="/api/v1")
+    v1.include_router(resources.router)
+    v1.include_router(agents.router)
+    v1.include_router(documents.router)
+    v1.include_router(memory.router)
+    v1.include_router(events.router)
+    v1.include_router(executions.router)
+    v1.include_router(organizations.router)
+    v1.include_router(auth.router)
+    v1.include_router(chat.router)
+    v1.include_router(notifications.router)
+    app.include_router(v1)
 
 
 def create_app() -> FastAPI:

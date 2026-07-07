@@ -105,7 +105,15 @@ _VERB_BY_METHOD = {
 }
 
 _PUBLIC_PATHS = {"/docs", "/openapi.json", "/redoc"}
-_PUBLIC_PREFIXES = ("/health", "/auth")
+_PUBLIC_PREFIXES = ("/health", "/auth", "/api/v1/auth")
+
+
+def _normalize_api_path(path: str) -> str:
+    if path.startswith("/api/v1/"):
+        return path[len("/api/v1"):]
+    if path == "/api/v1":
+        return "/"
+    return path
 
 
 def _is_public_request_path(request: Request) -> bool:
@@ -119,7 +127,7 @@ def _is_public_request_path(request: Request) -> bool:
 
 
 def _derive_action(request: Request) -> str | None:
-    path = request.url.path.strip("/")
+    path = _normalize_api_path(request.url.path).strip("/")
     if not path:
         return None
 
@@ -135,7 +143,7 @@ def _derive_action(request: Request) -> str | None:
 
 
 def _extract_resource_identifier(request: Request) -> str:
-    path = request.url.path.strip("/")
+    path = _normalize_api_path(request.url.path).strip("/")
     if not path:
         return ""
 

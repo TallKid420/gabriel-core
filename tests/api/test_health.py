@@ -13,3 +13,15 @@ def test_health_endpoints_are_public(client):
 	assert ready.status_code == 200
 	assert ready.json() == {"status": "ready"}
 
+
+def test_openapi_paths_are_versioned_except_health(client):
+	openapi = client.get("/openapi.json")
+	assert openapi.status_code == 200
+	paths = openapi.json().get("paths", {})
+
+	assert "/health" in paths
+	assert "/api/v1/memory" in paths
+	assert "/api/v1/auth/me" in paths
+	assert "/memory" not in paths
+	assert "/auth/me" not in paths
+
