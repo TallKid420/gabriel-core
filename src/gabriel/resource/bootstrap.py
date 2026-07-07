@@ -45,6 +45,40 @@ def register_core_resource_types(target_registry: ResourceRegistry | None = None
             tags=frozenset({"core", "content"}),
         )
 
+    # Register Agent resource type (ingestion target).
+    if not reg.is_registered("agent"):
+        from gabriel.agent.models import Agent
+
+        reg.register(
+            Agent,
+            description="Agent resource",
+            version="1.0",
+            tags=frozenset({"core", "agent"}),
+            # capabilities=[Capability.AGENT_CREATE, Capability.AGENT_UPDATE, Capability.AGENT_DELETE], # FIXME: Next_Development_Milestones.pdf - Task 1.1
+        )
+
+    # Register the Policy resource type (ingestion target).
+    if not reg.is_registered("policy"):
+        from gabriel.policy.models import Policy
+
+        reg.register(
+            Policy,
+            description="Policy resource",
+            version="1.0",
+            tags=frozenset({"core", "policy"}),
+        )
+
+    # # Register the Notification resource type (ingestion target).
+    # if not reg.is_registered("notification"):
+    #     from gabriel.notification.models import Notification
+
+    #     reg.register(
+    #         Notification,
+    #         description="Notification resource",
+    #         version="1.0",
+    #         tags=frozenset({"core", "notification"}),
+    #     )
+
     # Register identity types (Principal, future: User, Agent, etc.)
     from gabriel.identity.bootstrap import register_identity_resource_types
     register_identity_resource_types(reg)
