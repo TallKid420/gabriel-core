@@ -1,9 +1,11 @@
+"""Mappers between Domain (Tool) and Persistence (ToolORM)."""
+
+from gabriel.resource.grn import GRN
 from gabriel.tool.models import Tool
 from gabriel.tool.orm import ToolORM
-from gabriel.resource.grn import GRN
 
 def orm_to_domain(orm: ToolORM) -> Tool:
-    grn = GRN.parse(orm.grn) 
+    grn = GRN.parse(orm.grn)
 
     return Tool(
         grn=grn,
@@ -15,6 +17,8 @@ def orm_to_domain(orm: ToolORM) -> Tool:
         updated_at=orm.updated_at,
         created_by=orm.created_by,
         updated_by=orm.updated_by,
+        metadata=orm.resource_metadata,
+        labels=orm.labels,
         name=orm.name,
         description=orm.description,
         category=orm.category,
@@ -35,6 +39,8 @@ def domain_to_orm(domain: Tool) -> ToolORM:
         updated_at=domain.updated_at,
         created_by=domain.created_by,
         updated_by=domain.updated_by,
+        resource_metadata=domain.metadata,
+        labels=domain.labels,
         name=domain.name,
         description=domain.description,
         category=domain.category,

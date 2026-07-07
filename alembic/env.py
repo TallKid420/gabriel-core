@@ -16,6 +16,7 @@ import gabriel.identity.orm  # noqa: E402, F401  # registers PrincipalORM
 import gabriel.organization.orm  # noqa: E402, F401  # registers OrganizationORM
 import gabriel.agent.orm  # noqa: E402, F401  # registers AgentORM
 import gabriel.policy.orm  # noqa: E402, F401  # registers PolicyORM
+import gabriel.tool.orm  # noqa: E402, F401  # registers ToolORM
 import gabriel.events.orm  # noqa: E402, F401  # registers EventORM
 
 # this is the Alembic Config object, which provides

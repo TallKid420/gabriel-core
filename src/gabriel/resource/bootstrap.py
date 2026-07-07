@@ -86,6 +86,25 @@ def register_core_resource_types(target_registry: ResourceRegistry | None = None
             ),
         )
 
+    # Register the Tool resource type.
+    if not reg.is_registered("tool"):
+        from gabriel.tool.models import Tool
+
+        reg.register(
+            Tool,
+            description="Tool resource",
+            version="1.0",
+            tags=frozenset({"core", "tool"}),
+            capabilities=frozenset(
+                {
+                    "tool:create",
+                    "tool:read",
+                    "tool:update",
+                    "tool:delete",
+                }
+            ),
+        )
+
     # # Register the Notification resource type (ingestion target).
     # if not reg.is_registered("notification"):
     #     from gabriel.notification.models import Notification
