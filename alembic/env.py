@@ -18,6 +18,7 @@ import gabriel.agent.orm  # noqa: E402, F401  # registers AgentORM
 import gabriel.policy.orm  # noqa: E402, F401  # registers PolicyORM
 import gabriel.tool.orm  # noqa: E402, F401  # registers ToolORM
 import gabriel.events.orm  # noqa: E402, F401  # registers EventORM
+import gabriel.events.projections.audit_projection  # noqa: E402, F401  # registers AuditLogORM
 import gabriel.resource.read_model_orm  # noqa: E402, F401  # registers ResourceReadModelORM
 
 # this is the Alembic Config object, which provides

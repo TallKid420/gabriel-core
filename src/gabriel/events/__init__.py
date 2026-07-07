@@ -6,6 +6,7 @@ from gabriel.events.handler import Handler
 from gabriel.events.event_store import EventStore
 from gabriel.events.dispatcher import Dispatcher
 from gabriel.events.projection import Projection
+from gabriel.events.audit import AuditEvent, PeelEvaluationEvent, PolicyChangeEvent
 from gabriel.events.handlers import CreateOrganizationHandler
 from gabriel.events.projections import OrganizationProjection
 from gabriel.events.exceptions import (
@@ -24,6 +25,9 @@ __all__ = [
     "EventStore",
     "Dispatcher",
     "Projection",
+    "AuditEvent",
+    "PeelEvaluationEvent",
+    "PolicyChangeEvent",
     "CreateOrganizationHandler",
     "OrganizationProjection",
     "EventsError",

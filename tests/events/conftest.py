@@ -7,6 +7,7 @@ from gabriel.database.base import Base
 import gabriel.organization.orm  # noqa: F401
 import gabriel.identity.orm  # noqa: F401
 import gabriel.events.orm  # noqa: F401
+import gabriel.events.projections.audit_projection  # noqa: F401
 
 # In-memory SQLite for fast, isolated tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

@@ -147,6 +147,20 @@ class Dispatcher:
 
         return events
 
+    async def record_event(self, event: Event) -> None:
+        """Persist a standalone event and notify projections/listeners.
+
+        Use this for system-level events that are not produced by a command
+        handler but still must be durable and projection-visible.
+        """
+        append_result = self.event_store.append(event)
+        if inspect.isawaitable(append_result):
+            await append_result
+
+        await self._notify_projections(event)
+        for queue in self._listeners:
+            await queue.put(event)
+
     async def replay_events(self, events: list[Event]) -> None:
         """Replay a sequence of events to rebuild Projection state.
 

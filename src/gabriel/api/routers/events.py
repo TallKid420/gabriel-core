@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from gabriel.runtime.context import ExecutionContext
@@ -31,6 +33,28 @@ async def stream_events(
         streamer.stream_events(context.organization),
         media_type="text/event-stream",
     )
+
+
+@router.get("/audit", response_model=EventListResponse)
+async def query_audit_log(
+    start_time: datetime | None = Query(default=None),
+    end_time: datetime | None = Query(default=None),
+    principal_id: str | None = Query(default=None),
+    decision: str | None = Query(default=None, pattern="^(allow|deny)$"),
+    limit: int = Query(default=200, ge=1, le=1000),
+    context: ExecutionContext = Depends(get_current_context),
+    service: GatewayService = Depends(get_gateway_service),
+) -> EventListResponse:
+    events = await service.query_audit_log(
+        start_time=start_time,
+        end_time=end_time,
+        principal_id=principal_id,
+        decision=decision,
+        organization_id=context.organization,
+        limit=limit,
+    )
+    items = [EventResponse(**event.model_dump(mode="json")) for event in events]
+    return EventListResponse(items=items)
 
 
 @router.get("/{event_id}", response_model=EventResponse)

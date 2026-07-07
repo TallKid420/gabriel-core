@@ -14,17 +14,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from gabriel.api.auth import AuthenticationError, authenticate_token, extract_bearer_token
-from gabriel.events.event import Event
+from gabriel.events.audit import PeelEvaluationEvent
 from gabriel.policy.engine import Effect
 from gabriel.runtime.context import ExecutionContext
 
 
 _REQUEST_LOG_PATH_ENV = "GABRIEL_REQUEST_LOG_PATH"
 _DEFAULT_REQUEST_LOG_PATH = Path(".gabriel") / "requests.log"
-
-
-class PeelEvaluationEvent(Event):
-    type: str = "peel_evaluation"
 
 
 def _build_request_logger() -> logging.Logger:
@@ -167,6 +163,11 @@ def _parse_correlation_id(raw: str | None) -> UUID:
 async def _append_audit_event(request: Request, event: PeelEvaluationEvent) -> None:
     gateway_state = getattr(request.app.state, "gateway_state", None)
     if gateway_state is None:
+        return
+
+    dispatcher = getattr(gateway_state, "dispatcher", None)
+    if dispatcher is not None and hasattr(dispatcher, "record_event"):
+        await dispatcher.record_event(event)
         return
 
     event_store = getattr(gateway_state, "event_store", None)

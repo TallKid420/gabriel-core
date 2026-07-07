@@ -14,6 +14,7 @@ from gabriel.events import Command, Dispatcher, EventStore, Handler
 from gabriel.events.exceptions import CommandValidationError
 from gabriel.events.event import Event
 from gabriel.events.resource_projection import ResourceReadModelProjection
+from gabriel.events.projections.audit_projection import AuditProjection
 from gabriel.events.sql_event_store import SqlAlchemyEventStore
 from gabriel.document.content_store import DiskContentStore
 from gabriel.database.base import Base
@@ -36,6 +37,7 @@ from gabriel.runtime.context import ExecutionContext
 from gabriel.resource.grn import GRN
 import gabriel.events.orm  # noqa: F401
 import gabriel.resource.read_model_orm  # noqa: F401
+import gabriel.events.projections.audit_projection  # noqa: F401
 import gabriel.policy.orm  # noqa: F401
 
 
@@ -165,6 +167,7 @@ class GatewayState:
         dispatcher: Dispatcher
         peel: PEEL
         resource_projection: ResourceReadModelProjection
+        audit_projection: AuditProjection
         memory_entries: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
@@ -224,6 +227,25 @@ class GatewayService:
                 }
                 self.state.memory_entries[memory_id] = entry
                 return entry
+
+        async def query_audit_log(
+                self,
+                *,
+                start_time=None,
+                end_time=None,
+                principal_id: str | None = None,
+                decision: str | None = None,
+                organization_id: str | None = None,
+                limit: int = 200,
+        ) -> list[Event]:
+                return await self.state.audit_projection.query(
+                        start_time=start_time,
+                        end_time=end_time,
+                        principal_id=principal_id,
+                        decision=decision,
+                        organization_id=organization_id,
+                        limit=limit,
+                )
 
         def delete_memory_entry(self, memory_id: str) -> bool:
                 return self.state.memory_entries.pop(memory_id, None) is not None
@@ -345,7 +367,9 @@ async def initialize_gateway_state(app) -> None:
         )
 
         resource_projection = ResourceReadModelProjection(projection_session_factory)
+        audit_projection = AuditProjection(projection_session_factory)
         dispatcher.register_projection(resource_projection)
+        dispatcher.register_projection(audit_projection)
 
         await resource_projection.bootstrap()
 
@@ -357,6 +381,7 @@ async def initialize_gateway_state(app) -> None:
                 dispatcher=dispatcher,
                 peel=peel,
                 resource_projection=resource_projection,
+                audit_projection=audit_projection,
         )
 
         app.state.peel = peel

@@ -62,3 +62,38 @@ def test_authorization_middleware_denies_and_emits_audit_event(client, make_auth
     assert new_events[0].payload["decision"] == "deny"
     assert new_events[0].payload["action"] == "memory:read"
     assert new_events[0].payload["path"] == "/memory"
+
+
+def test_audit_log_query_supports_principal_and_decision_filters(client, make_auth_headers):
+    alice_headers = make_auth_headers(
+        identifier="alice-audit",
+        correlation_id=str(uuid4()),
+        capabilities=("authenticate", "read_resource"),
+    )
+    bob_headers = make_auth_headers(
+        identifier="bob-audit",
+        correlation_id=str(uuid4()),
+        capabilities=("authenticate",),
+    )
+
+    allow_response = client.get("/memory", headers=alice_headers)
+    deny_response = client.get("/memory", headers=bob_headers)
+
+    assert allow_response.status_code == 200
+    assert deny_response.status_code == 403
+
+    query_headers = make_auth_headers(identifier="auditor", correlation_id=str(uuid4()))
+    response = client.get(
+        "/events/audit",
+        params={
+            "principal_id": "principal://acme/user/alice-audit",
+            "decision": "allow",
+        },
+        headers=query_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"]
+    assert all(item["principal_id"] == "principal://acme/user/alice-audit" for item in payload["items"])
+    assert all(item["payload"].get("decision") == "allow" for item in payload["items"])
