@@ -14,6 +14,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from gabriel.database.base import Base  # noqa: E402
 import gabriel.identity.orm  # noqa: E402, F401  # registers PrincipalORM
 import gabriel.organization.orm  # noqa: E402, F401  # registers OrganizationORM
+import gabriel.agent.orm  # noqa: E402, F401  # registers AgentORM
+import gabriel.policy.orm  # noqa: E402, F401  # registers PolicyORM
 import gabriel.events.orm  # noqa: E402, F401  # registers EventORM
 
 # this is the Alembic Config object, which provides
