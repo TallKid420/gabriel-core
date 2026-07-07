@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from gabriel.api.middleware.authorization import _derive_action, _extract_resource_identifier
 
 
@@ -26,39 +28,37 @@ def test_extract_resource_identifier_from_path(client):
 
 
 def test_authorization_middleware_allows_and_emits_audit_event(client, make_auth_headers):
-    correlation_id = "22222222-2222-2222-2222-222222222222"
+    correlation_id = str(uuid4())
     headers = make_auth_headers(correlation_id=correlation_id)
+    before = len(client.app.state.gateway_state.event_store.events_by_type("peel_evaluation"))
 
     response = client.get("/memory", headers=headers)
 
     assert response.status_code == 200
-    events = [
-        event
-        for event in client.app.state.gateway_state.event_store.events_by_type("peel_evaluation")
-        if event.correlation_id == correlation_id
-    ]
-    assert len(events) == 1
-    assert events[0].payload["decision"] == "allow"
-    assert events[0].payload["action"] == "memory:read"
-    assert events[0].payload["path"] == "/memory"
+    after_events = client.app.state.gateway_state.event_store.events_by_type("peel_evaluation")
+    new_events = after_events[before:]
+    assert len(new_events) == 1
+    assert new_events[0].correlation_id == correlation_id
+    assert new_events[0].payload["decision"] == "allow"
+    assert new_events[0].payload["action"] == "memory:read"
+    assert new_events[0].payload["path"] == "/memory"
 
 
 def test_authorization_middleware_denies_and_emits_audit_event(client, make_auth_headers):
-    correlation_id = "33333333-3333-3333-3333-333333333333"
+    correlation_id = str(uuid4())
     headers = make_auth_headers(
         correlation_id=correlation_id,
         capabilities=("authenticate",),
     )
+    before = len(client.app.state.gateway_state.event_store.events_by_type("peel_evaluation"))
 
     response = client.get("/memory", headers=headers)
 
     assert response.status_code == 403
-    events = [
-        event
-        for event in client.app.state.gateway_state.event_store.events_by_type("peel_evaluation")
-        if event.correlation_id == correlation_id
-    ]
-    assert len(events) == 1
-    assert events[0].payload["decision"] == "deny"
-    assert events[0].payload["action"] == "memory:read"
-    assert events[0].payload["path"] == "/memory"
+    after_events = client.app.state.gateway_state.event_store.events_by_type("peel_evaluation")
+    new_events = after_events[before:]
+    assert len(new_events) == 1
+    assert new_events[0].correlation_id == correlation_id
+    assert new_events[0].payload["decision"] == "deny"
+    assert new_events[0].payload["action"] == "memory:read"
+    assert new_events[0].payload["path"] == "/memory"

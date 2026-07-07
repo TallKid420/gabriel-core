@@ -45,7 +45,7 @@ def extract_bearer_token(authorization: str | None) -> str | None:
     return token
 
 
-def authenticate_token(
+async def authenticate_token(
     identity_service: IdentityService,
     token: str | None,
 ) -> AuthenticatedPrincipal:
@@ -58,7 +58,7 @@ def authenticate_token(
     if not token:
         raise AuthenticationError("Missing authentication token")
     try:
-        principal = identity_service.principal_from_token(token)
+        principal = await identity_service.authenticate_request_token(token)
     except ExpiredTokenError as exc:
         raise AuthenticationError("Session token has expired") from exc
     except InvalidSignatureError as exc:

@@ -6,11 +6,13 @@ Service or API layer are required.
 """
 from gabriel.identity.providers.base import AuthenticationResult, IdentityProvider
 from gabriel.identity.providers.dev import DevIdentityProvider
+from gabriel.identity.providers.production import ProductionIdentityProvider
 from gabriel.identity.providers.registry import ProviderRegistry
 
 __all__ = [
     "AuthenticationResult",
     "IdentityProvider",
     "DevIdentityProvider",
+    "ProductionIdentityProvider",
     "ProviderRegistry",
 ]

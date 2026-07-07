@@ -12,6 +12,7 @@ from gabriel.identity.providers import (
     AuthenticationResult,
     DevIdentityProvider,
     IdentityProvider,
+    ProductionIdentityProvider,
     ProviderRegistry,
 )
 from gabriel.identity.identity_service import (
@@ -49,6 +50,7 @@ __all__ = [
     "IdentityProvider",
     "AuthenticationResult",
     "DevIdentityProvider",
+    "ProductionIdentityProvider",
     "ProviderRegistry",
     "IdentityService",
     "LoginResult",

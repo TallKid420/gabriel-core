@@ -103,7 +103,7 @@ async def me(
     if token is None:
         token = request.cookies.get(identity_service.settings.session_cookie_name)
 
-    auth = authenticate_token(identity_service, token)
+    auth = await authenticate_token(identity_service, token)
     principal = auth.principal
     return {
         "principal_id": str(principal.id),
@@ -175,7 +175,7 @@ async def get_current_session(
     if token is None:
         token = request.cookies.get(identity_service.settings.session_cookie_name)
 
-    auth = authenticate_token(identity_service, token)
+    auth = await authenticate_token(identity_service, token)
     principal = auth.principal
     meta = principal.metadata or {}
     return {

@@ -225,7 +225,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 cookie_name = identity_service.settings.session_cookie_name
                 token = request.cookies.get(cookie_name)
 
-            auth_result = authenticate_token(identity_service, token)
+            auth_result = await authenticate_token(identity_service, token)
 
             correlation_id = _parse_correlation_id(request.headers.get("x-correlation-id"))
             request.state.execution_context = ExecutionContext(

@@ -42,7 +42,6 @@ class IdentitySettings:
             an ephemeral key is generated at startup (fine for dev/test).
         public_key_path: Optional path to a PEM public verification key.
         dev_auth_enabled: Whether the development identity provider is wired.
-            Forced off in production regardless of this flag.
     """
 
     environment: str = "development"
@@ -70,6 +69,5 @@ class IdentitySettings:
             session_cookie_secure=_env_bool("GABRIEL_SESSION_COOKIE_SECURE", is_prod),
             private_key_path=os.getenv("GABRIEL_JWT_PRIVATE_KEY_PATH"),
             public_key_path=os.getenv("GABRIEL_JWT_PUBLIC_KEY_PATH"),
-            # Dev auth is never enabled in production.
-            dev_auth_enabled=(not is_prod) and _env_bool("GABRIEL_DEV_AUTH_ENABLED", True),
+            dev_auth_enabled=_env_bool("GABRIEL_DEV_AUTH_ENABLED", True),
         )

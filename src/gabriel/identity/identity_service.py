@@ -20,12 +20,15 @@ from typing import Any
 
 from gabriel.identity.auth import TokenService
 from gabriel.identity.config import IdentitySettings
+from gabriel.database.session import async_session
+from gabriel.identity.exceptions import IdentityConfigurationError
 from gabriel.identity.keys import KeyManager
 from gabriel.identity.models import Capability, PrincipalStatus, PrincipalType
 from gabriel.identity.principal import Principal
 from gabriel.identity.principal_id import PrincipalID
 from gabriel.identity.providers.base import IdentityProvider
 from gabriel.identity.providers.dev import DevIdentityProvider
+from gabriel.identity.providers.production import ProductionIdentityProvider
 from gabriel.identity.providers.registry import ProviderRegistry
 from gabriel.identity.token import Token, TokenPayload
 
@@ -87,6 +90,18 @@ class IdentityService:
         payload = self.token_service.verify(token)
         return self._principal_from_payload(payload)
 
+    async def authenticate_request_token(self, token: Token | str) -> Principal:
+        """Verify a request token and resolve the authenticated principal.
+
+        Production requests are resolved through the persisted-principal provider.
+        Non-production requests continue using signed claims directly.
+        """
+        token_str = token.value if isinstance(token, Token) else token
+        if self.registry.has("production"):
+            result = await self.registry.get("production").authenticate({"token": token_str})
+            return result.principal
+        return self.principal_from_token(token_str)
+
     @staticmethod
     def _principal_from_payload(payload: TokenPayload) -> Principal:
         capabilities = {Capability(cap) for cap in payload.capabilities}
@@ -134,14 +149,33 @@ def build_default_identity_service(
     still starts (JWKS/verification work); login simply reports no methods.
     """
     settings = settings or IdentitySettings.from_env()
+    if settings.is_production and settings.dev_auth_enabled:
+        raise IdentityConfigurationError(
+            "Dev identity provider is forbidden when GABRIEL_ENV=production"
+        )
+
     key_manager = build_key_manager(settings)
     registry = ProviderRegistry()
+    token_service = TokenService(
+        key_manager, token_expiry_seconds=settings.token_ttl_seconds
+    )
 
     providers: list[IdentityProvider] = []
     if settings.dev_auth_enabled and not settings.is_production:
         providers.append(DevIdentityProvider(settings))
+    if settings.is_production:
+        providers.append(ProductionIdentityProvider(token_service, async_session))
+
+    assert not settings.is_production or all(
+        provider.name != "dev" for provider in providers
+    )
 
     for provider in providers:
         registry.register(provider)
 
-    return IdentityService(settings=settings, key_manager=key_manager, registry=registry)
+    return IdentityService(
+        settings=settings,
+        key_manager=key_manager,
+        registry=registry,
+        token_service=token_service,
+    )
