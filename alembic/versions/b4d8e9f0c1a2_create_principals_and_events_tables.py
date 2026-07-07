@@ -35,7 +35,6 @@ def upgrade() -> None:
             sa.String(128),
             sa.ForeignKey("organizations.org_id"),
             nullable=False,
-            index=True,
         ),
         # Principal metadata
         sa.Column("principal_type", sa.String(64), nullable=False),

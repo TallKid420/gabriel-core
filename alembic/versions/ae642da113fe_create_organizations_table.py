@@ -24,7 +24,7 @@ def upgrade() -> None:
         "organizations",
         # --- GabrielResourceMixin columns ---
         sa.Column("grn", sa.String(255), primary_key=True, nullable=False),
-        sa.Column("org_id", sa.String(128), nullable=False, index=True),
+        sa.Column("org_id", sa.String(128), nullable=False),
         sa.Column(
             "resource_type",
             sa.String(64),
