@@ -7,6 +7,11 @@ class MemoryLayer(str, Enum):
     SHORT_TERM = "short_term" # Context window / working memory
     LONG_TERM = "long_term" # Knowledge base / Vector store
     EPISODIC = "episodic" # Past experiences / logs
+    WORKING = "working" # Active task-focused memory
+    SEMANTIC = "semantic" # Structured facts and knowledge
+    PROCEDURAL = "procedural" # How-to patterns and routines
+    ARCHIVAL = "archival" # Cold, long-horizon storage
+    EXTERNAL = "external" # References managed outside core memory
 
 class MemoryEntry(BaseModel):
     layer: MemoryLayer
