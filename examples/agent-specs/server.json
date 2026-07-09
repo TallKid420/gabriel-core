@@ -1,0 +1,45 @@
+{
+  "name": "server",
+  "description": "Stateless LLM completion agent migrated from the legacy ServerAgent.",
+  "runtime": "langgraph",
+  "model": "gpt-oss:20b",
+  "provider": "ollama",
+  "system_prompt": "",
+  "capabilities": [
+    "chat",
+    "stream"
+  ],
+  "tools": [],
+  "memory_layers": [
+    "working"
+  ],
+  "triggers": [
+    {
+      "event_type": "api:POST:/chat/send",
+      "filter": {
+        "channel": "server"
+      }
+    }
+  ],
+  "runtime_config": {
+    "runtime": "langgraph",
+    "timeout_seconds": 20,
+    "max_iterations": 10,
+    "temperature": 0.3,
+    "max_tokens": 1024
+  },
+  "memory": {
+    "read_layers": [
+      "working"
+    ],
+    "write_layers": [
+      "working"
+    ],
+    "retention": "session"
+  },
+  "metadata": {
+    "template": "server",
+    "legacy_class": "ServerAgent",
+    "migrated_from": "gabriel-legacy/config/agents.yaml"
+  }
+}

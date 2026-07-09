@@ -1,0 +1,62 @@
+{
+  "name": "daemon-worker",
+  "description": "Event-driven background worker migrated from the legacy DaemonAgent.",
+  "runtime": "langgraph",
+  "model": "gpt-oss:20b",
+  "provider": "ollama",
+  "system_prompt": "You are a background worker. React to platform events efficiently.",
+  "capabilities": [
+    "event_subscribe",
+    "memory_read",
+    "memory_write",
+    "tool_invoke",
+    "file_read"
+  ],
+  "tools": [
+    "grn:*:tool/find_file:*",
+    "grn:*:tool/search_documents:*",
+    "grn:*:tool/semantic_search:*",
+    "grn:*:tool/get_time:*"
+  ],
+  "memory_layers": [
+    "working",
+    "episodic",
+    "long_term"
+  ],
+  "triggers": [
+    {
+      "event_type": "DocumentIngested",
+      "filter": {}
+    },
+    {
+      "event_type": "ResourceCreated",
+      "filter": {
+        "resource_type": "document"
+      }
+    }
+  ],
+  "runtime_config": {
+    "runtime": "langgraph",
+    "timeout_seconds": 300,
+    "max_iterations": 50,
+    "temperature": 0.0,
+    "max_tokens": 4096
+  },
+  "memory": {
+    "read_layers": [
+      "working",
+      "episodic",
+      "long_term"
+    ],
+    "write_layers": [
+      "episodic",
+      "long_term"
+    ],
+    "retention": "persistent"
+  },
+  "metadata": {
+    "template": "daemon",
+    "legacy_class": "DaemonAgent",
+    "migrated_from": "gabriel-legacy/config/agents.yaml"
+  }
+}

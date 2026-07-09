@@ -1,0 +1,63 @@
+{
+  "name": "hermes-chat",
+  "description": "Interactive conversational assistant migrated from the legacy ChatAgent.",
+  "runtime": "langgraph",
+  "model": "gpt-oss:120b",
+  "provider": "ollama",
+  "system_prompt": "You are Hermes, a personal assistant.",
+  "capabilities": [
+    "chat",
+    "stream",
+    "memory_read",
+    "memory_write",
+    "tool_invoke"
+  ],
+  "tools": [
+    "grn:*:tool/get_time:*",
+    "grn:*:tool/days_between:*",
+    "grn:*:tool/calculate:*",
+    "grn:*:tool/convert_units:*",
+    "grn:*:tool/list_tools:*"
+  ],
+  "memory_layers": [
+    "working",
+    "short_term",
+    "long_term"
+  ],
+  "triggers": [
+    {
+      "event_type": "UserMessageReceived",
+      "filter": {}
+    },
+    {
+      "event_type": "api:POST:/chat/send",
+      "filter": {
+        "channel": "chat"
+      }
+    }
+  ],
+  "runtime_config": {
+    "runtime": "langgraph",
+    "timeout_seconds": 20,
+    "max_iterations": 10,
+    "temperature": 0.0,
+    "max_tokens": 10000
+  },
+  "memory": {
+    "read_layers": [
+      "working",
+      "short_term",
+      "long_term"
+    ],
+    "write_layers": [
+      "working",
+      "short_term"
+    ],
+    "retention": "session"
+  },
+  "metadata": {
+    "template": "chat",
+    "legacy_class": "ChatAgent",
+    "migrated_from": "gabriel-legacy/config/agents.yaml"
+  }
+}
