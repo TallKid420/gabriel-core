@@ -191,44 +191,73 @@ PYTHONPATH=src python scripts/seed_agent_specs.py --out examples/agent-specs --f
 
 Sample output lives in [`examples/agent-specs/`](../examples/agent-specs/).
 
-## 9. Desktop ↔ Core wiring
+## 9. Desktop ↔ Core wiring (over HTTP)
 
-`gabriel-desktop` does **not** re-implement agent modelling. Its gateway (BFF)
-imports `gabriel.agent` and drives it. The seam is
-`apps/gateway/src/gabriel_gateway/core_specs.py` (`CoreSpecService`), exposed
-over HTTP by `apps/gateway/src/gabriel_gateway/main.py`:
+`gabriel-desktop` does **not** re-implement agent modelling **and does not
+install or import `gabriel-core`**. The two are wired together purely over
+**HTTP**: gabriel-core owns all agent-spec logic and exposes it; the desktop
+gateway (BFF) is a thin HTTP client that forwards requests and relays JSON.
+
+**Core side (owns the logic + endpoints):**
+* `src/gabriel/api/services/agent_specs.py` — `AgentSpecService` (templates,
+  instantiate + validate, GRN resolution, save/load/list/delete).
+* `src/gabriel/api/routers/agent_specs.py` — FastAPI router mounted at
+  `/api/v1/agent-specs`, registered in `src/gabriel/api/app.py`. These routes
+  are allowlisted as public in the authorization middleware (config/authoring
+  endpoints, no principal-scoped data).
+
+**Desktop side (HTTP client only):**
+* `apps/gateway/src/gabriel_gateway/core_specs.py` — `CoreSpecClient`, an
+  `httpx` client that calls gabriel-core. **No `gabriel.*` imports.**
+* `apps/gateway/src/gabriel_gateway/main.py` — the browser-facing gateway API,
+  which forwards to `CoreSpecClient`.
 
 ```
-Browser ──HTTP──▶ Gateway (FastAPI, BFF) ──imports──▶ gabriel.agent (core)
-                     │
-                     └─ CoreSpecService: templates, instantiate, resolve GRNs,
-                        save / load / list / delete, seed
+Browser ──HTTP──▶ Gateway (FastAPI BFF) ──HTTP──▶ gabriel-core
+                  CoreSpecClient (httpx)          /api/v1/agent-specs
+                  no gabriel import               AgentSpecService (all logic)
 ```
 
-| Method | Path                          | Purpose                                  |
-|--------|-------------------------------|------------------------------------------|
-| GET    | `/health`                     | liveness                                 |
-| GET    | `/agent-specs/templates`      | list migrated template descriptors       |
-| POST   | `/agent-specs/instantiate`    | build a spec from template + overrides   |
-| GET    | `/agent-specs`                | list persisted spec names                |
-| POST   | `/agent-specs`                | build + persist a spec                   |
-| GET    | `/agent-specs/{name}`         | load a persisted spec                    |
-| DELETE | `/agent-specs/{name}`         | delete a persisted spec                  |
+Core endpoints (mounted under `/api/v1`):
 
-The gateway keeps **no agent business logic** (per the BFF ADR): every
-operation delegates to gabriel-core. Install the dependency editable during
-development:
+| Method | Path                                | Purpose                                |
+|--------|-------------------------------------|----------------------------------------|
+| GET    | `/api/v1/agent-specs/templates`     | list migrated template descriptors     |
+| POST   | `/api/v1/agent-specs/instantiate`   | build a spec from template + overrides |
+| GET    | `/api/v1/agent-specs`               | list persisted spec names              |
+| POST   | `/api/v1/agent-specs`               | build + persist a spec                 |
+| GET    | `/api/v1/agent-specs/{name}`        | load a persisted spec                  |
+| DELETE | `/api/v1/agent-specs/{name}`        | delete a persisted spec                |
+
+The gateway re-exposes these to the browser under `/agent-specs/*` (same shape).
+
+**Configuration:**
+* Core: `GABRIEL_AGENT_SPECS_DIR` (spec store), `GABRIEL_DEFAULT_ORG_ID` (GRN org).
+* Gateway: `GABRIEL_GATEWAY_CORE_BASE_URL` (defaults to `http://localhost:8000`).
+
+**Run both (two independent services):**
 
 ```bash
-pip install -e ../../gabriel-core
+# terminal 1 — gabriel-core
+cd gabriel-core
+GABRIEL_AGENT_SPECS_DIR=.gabriel/agent-specs uvicorn gabriel.api.app:app --port 8000
+
+# terminal 2 — gabriel-desktop gateway
+cd gabriel-desktop/apps/gateway
+GABRIEL_GATEWAY_CORE_BASE_URL=http://localhost:8000 \
+  uvicorn gabriel_gateway.main:app --port 8100 --app-dir src
 ```
 
 ## 10. Validation & tests
 
 * `gabriel-core`: `tests/agent/` (GRN bindings, templates, spec store,
   spec-driven execution) — run with `PYTHONPATH=src pytest tests/agent`.
-* `gabriel-desktop`: `apps/gateway/tests/` (CoreSpecService seam + FastAPI HTTP
-  API) — run with `PYTHONPATH=src pytest tests/`.
+* `gabriel-core`: `tests/api/test_agent_specs_api.py` (the HTTP endpoints the
+  gateway consumes).
+* `gabriel-desktop`: `apps/gateway/tests/` (the `CoreSpecClient` HTTP seam +
+  the gateway's FastAPI API). Tests drive gabriel-core's ASGI app through an
+  in-process HTTP transport, so the two-hop path is exercised without sockets —
+  run with `PYTHONPATH=src pytest tests/`.
 
 All template specs are validated against the template vocabulary via
 `AgentValidator` (checking runtimes, tool names, capabilities, memory layers,
@@ -244,14 +273,19 @@ gabriel-core/
     specification.py  AgentSpecification (+ tool_names/resolved_tools/…)
     templates.py      AgentTemplate library (chat/engineer/researcher/daemon/server)
     store.py          AgentSpecificationStore (file persistence)
+  src/gabriel/api/
+    services/agent_specs.py  AgentSpecService (all agent-spec logic)
+    routers/agent_specs.py   HTTP router (/api/v1/agent-specs)
+    app.py                   registers the router
   scripts/seed_agent_specs.py    materialise templates to disk
   examples/agent-specs/          sample seeded specs
   tests/agent/                   unit + integration tests
+  tests/api/test_agent_specs_api.py  HTTP endpoint tests
 
-gabriel-desktop/
+gabriel-desktop/                 (no gabriel-core dependency)
   apps/gateway/src/gabriel_gateway/
-    settings.py       gateway settings (agent_specs_dir, org id, …)
-    core_specs.py     CoreSpecService — the core seam
-    main.py           FastAPI app exposing the spec API
-  apps/gateway/tests/            seam + HTTP API tests
+    settings.py       gateway settings (core_base_url, …)
+    core_specs.py     CoreSpecClient — httpx client to gabriel-core
+    main.py           FastAPI app forwarding to core over HTTP
+  apps/gateway/tests/            HTTP seam + gateway API tests
 ```

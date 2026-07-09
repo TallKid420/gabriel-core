@@ -105,7 +105,10 @@ _VERB_BY_METHOD = {
 }
 
 _PUBLIC_PATHS = {"/docs", "/openapi.json", "/redoc"}
-_PUBLIC_PREFIXES = ("/health", "/auth", "/api/v1/auth")
+# Agent-specification authoring/config endpoints are consumed by the desktop
+# BFF over HTTP (Phase 4 wiring). They carry no principal-scoped data and are
+# allowlisted so the gateway can drive template/spec workflows.
+_PUBLIC_PREFIXES = ("/health", "/auth", "/api/v1/auth", "/api/v1/agent-specs")
 
 
 def _normalize_api_path(path: str) -> str:

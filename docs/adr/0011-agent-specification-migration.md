@@ -51,9 +51,15 @@ and wires `gabriel-desktop` to consume it.
    from the spec (`request.agent.specification.runtime`), proven end-to-end in
    `tests/agent/test_spec_execution.py`.
 
-7. **Desktop ↔ core wiring.** The desktop gateway (BFF) imports `gabriel.agent`
-   through `CoreSpecService` and exposes it over HTTP. The gateway holds no
-   agent business logic (consistent with the BFF ADR).
+7. **Desktop ↔ core wiring over HTTP.** gabriel-core exposes the agent-spec
+   system as HTTP endpoints under `/api/v1/agent-specs`
+   (`gabriel/api/routers/agent_specs.py` → `gabriel/api/services/agent_specs.py`).
+   The desktop gateway (BFF) consumes these endpoints purely over HTTP via an
+   `httpx` client (`CoreSpecClient`) and **does not import or install
+   `gabriel-core`**. The two components are separately deployable services; the
+   gateway holds no agent business logic (consistent with the BFF ADR). This
+   supersedes the earlier editable-install approach, which coupled the two repos
+   at the package level.
 
 ## Backward compatibility
 
