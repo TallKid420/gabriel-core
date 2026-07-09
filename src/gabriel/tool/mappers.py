@@ -1,10 +1,12 @@
 """Mappers between Domain (Tool) and Persistence (ToolORM)."""
 
 from gabriel.resource.grn import GRN
-from gabriel.tool.models import Tool
+from gabriel.tool.models import SafetyLevel, Tool, ToolCategory
 from gabriel.tool.orm import ToolORM
 
+
 def orm_to_domain(orm: ToolORM) -> Tool:
+    """Convert a :class:`ToolORM` row to a :class:`Tool` domain object."""
     grn = GRN.parse(orm.grn)
 
     return Tool(
@@ -21,14 +23,17 @@ def orm_to_domain(orm: ToolORM) -> Tool:
         labels=orm.labels,
         name=orm.name,
         description=orm.description,
-        category=orm.category,
+        category=ToolCategory(orm.category),
         input_schema=orm.input_schema,
         output_schema=orm.output_schema,
-        safety_level=orm.safety_level,
+        safety_level=SafetyLevel(orm.safety_level),
         required_capabilities=orm.required_capabilities,
+        runtime_binding=orm.runtime_binding,
     )
 
+
 def domain_to_orm(domain: Tool) -> ToolORM:
+    """Convert a :class:`Tool` domain object to a :class:`ToolORM` row."""
     return ToolORM(
         grn=str(domain.grn),
         org_id=domain.org_id,
@@ -43,9 +48,11 @@ def domain_to_orm(domain: Tool) -> ToolORM:
         labels=domain.labels,
         name=domain.name,
         description=domain.description,
-        category=domain.category,
+        # Store enum as its raw value so DB stays stable across renames
+        category=domain.category.value,
         input_schema=domain.input_schema,
         output_schema=domain.output_schema,
-        safety_level=domain.safety_level,
+        safety_level=domain.safety_level.value,
         required_capabilities=domain.required_capabilities,
+        runtime_binding=domain.runtime_binding,
     )

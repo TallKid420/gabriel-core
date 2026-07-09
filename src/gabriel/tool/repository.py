@@ -49,6 +49,7 @@ class ToolRepository:
         existing.output_schema = tool_orm.output_schema
         existing.safety_level = tool_orm.safety_level
         existing.required_capabilities = tool_orm.required_capabilities
+        existing.runtime_binding = tool_orm.runtime_binding
 
         await self.session.commit()
         await self.session.refresh(existing)

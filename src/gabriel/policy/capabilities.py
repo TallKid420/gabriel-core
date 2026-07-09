@@ -53,6 +53,20 @@ ACTION_CAPABILITY_MAP: dict[str, Capability] = {
     "policy:create": Capability.MANAGE_POLICIES,
     "policy:update": Capability.MANAGE_POLICIES,
     "policy:delete": Capability.MANAGE_POLICIES,
+    # Tool invocation
+    "tool:invoke": Capability.CALL_TOOL,
+    "tool:create": Capability.WRITE_RESOURCE,
+    "tool:read": Capability.READ_RESOURCE,
+    "tool:update": Capability.WRITE_RESOURCE,
+    "tool:delete": Capability.WRITE_RESOURCE,
+    # File tools (org-scoped sandboxed access)
+    "file:read": Capability.FILE_READ,
+    "file:write": Capability.FILE_WRITE,
+    # Integration management
+    "integration:create": Capability.WRITE_RESOURCE,
+    "integration:read": Capability.READ_RESOURCE,
+    "integration:update": Capability.WRITE_RESOURCE,
+    "integration:delete": Capability.WRITE_RESOURCE,
 }
 
 

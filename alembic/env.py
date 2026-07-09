@@ -20,6 +20,8 @@ import gabriel.tool.orm  # noqa: E402, F401  # registers ToolORM
 import gabriel.events.orm  # noqa: E402, F401  # registers EventORM
 import gabriel.events.projections.audit_projection  # noqa: E402, F401  # registers AuditLogORM
 import gabriel.resource.read_model_orm  # noqa: E402, F401  # registers ResourceReadModelORM
+import gabriel.memory.orm  # noqa: E402, F401  # registers MemoryEntryORM
+import gabriel.integration.orm  # noqa: E402, F401  # registers ExternalIntegrationORM
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

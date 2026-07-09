@@ -35,6 +35,8 @@ class Capability(str, Enum):
     READ_PRINCIPAL = "read_principal"  # Can read principal metadata (self + org)
     EXECUTE_WORKFLOW = "execute_workflow"  # Can execute workflows/agents
     CALL_TOOL = "call_tool"  # Can invoke external tools
+    FILE_READ = "file_read"  # Can read org-scoped files via file tools
+    FILE_WRITE = "file_write"  # Can write org-scoped files via file tools
     READ_RESOURCE = "read_resource"  # Can read resources in org
     WRITE_RESOURCE = "write_resource"  # Can create/update resources
 

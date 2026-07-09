@@ -1,5 +1,11 @@
-from sqlalchemy.exc import IntegrityError
+"""ToolService — business logic for the Tool resource."""
+
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from typing import Any
+
+from sqlalchemy.exc import IntegrityError
 
 from gabriel.events.event import Event
 from gabriel.events.repository import EventRepository
@@ -10,28 +16,38 @@ from gabriel.resource.grn import GRN
 from gabriel.resource.models import ResourceState
 from gabriel.resource.registry import registry
 from gabriel.tool.mappers import domain_to_orm, orm_to_domain
-from gabriel.tool.models import Tool
+from gabriel.tool.models import SafetyLevel, Tool, ToolCategory
 from gabriel.tool.repository import ToolRepository
 
 
-def utcnow() -> datetime:
+def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
 
 class ToolService:
     """Business logic for Tools.
-    
-    This service:
-    - Accepts and returns Domain objects (Tool, not ToolORM)
-    - Uses the repository (internal persistence layer) privately
-    - Never exposes ORM models to callers
-    - Emits events transactionally (ADR-017 outbox pattern)
+
+    Responsibilities
+    ----------------
+    - Accepts and returns Domain objects (Tool, not ToolORM).
+    - Uses the repository as an internal persistence detail.
+    - Never exposes ORM models to callers.
+    - Emits resource lifecycle events transactionally (ADR-017).
     """
 
-    def __init__(self, repository: ToolRepository, event_repo: EventRepository | None = None):
+    def __init__(
+        self,
+        repository: ToolRepository,
+        event_repo: EventRepository | None = None,
+    ) -> None:
         register_core_resource_types()
         self.repo = repository
         self.event_repo = event_repo
         self.factory = ResourceFactory(registry)
+
+    # ------------------------------------------------------------------
+    # Create
+    # ------------------------------------------------------------------
 
     async def create_tool(
         self,
@@ -40,13 +56,14 @@ class ToolService:
         *,
         name: str,
         description: str,
-        category: str,
-        input_schema: dict,
-        output_schema: dict,
-        safety_level: int,
+        category: ToolCategory,
+        input_schema: dict[str, Any],
+        output_schema: dict[str, Any],
+        safety_level: SafetyLevel,
         required_capabilities: list[str],
+        runtime_binding: str,
         tool_grn: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
         correlation_id: str | None = None,
     ) -> Tool:
@@ -65,6 +82,7 @@ class ToolService:
             output_schema=output_schema,
             safety_level=safety_level,
             required_capabilities=required_capabilities,
+            runtime_binding=runtime_binding,
             labels=labels or {},
             metadata=metadata or {},
         )
@@ -86,15 +104,44 @@ class ToolService:
                 await self.repo.session.commit()
             return orm_to_domain(persisted_orm)
         except IntegrityError as exc:
-            raise DuplicateResourceError(f"Tool with GRN '{grn_str}' already exists.") from exc
+            raise DuplicateResourceError(
+                f"Tool with GRN '{grn_str}' already exists."
+            ) from exc
+
+    # ------------------------------------------------------------------
+    # Read
+    # ------------------------------------------------------------------
 
     async def get_tool(self, grn_str: str) -> Tool:
         orm_tool = await self.repo.get_by_grn(grn_str)
         return orm_to_domain(orm_tool)
 
-    async def list_tools(self, org_id: str | None = None) -> list[Tool]:
-        orm_tools = await self.repo.list_for_org(org_id) if org_id else await self.repo.list_all()
-        return [orm_to_domain(tool) for tool in orm_tools]
+    async def get_tool_by_name(self, org_id: str, name: str) -> Tool | None:
+        """Return a Tool by org + name slug, or ``None`` if not found."""
+        tools = await self.repo.list_for_org(org_id)
+        for t in tools:
+            if t.name == name:
+                return orm_to_domain(t)
+        return None
+
+    async def list_tools(
+        self,
+        org_id: str | None = None,
+        category: ToolCategory | None = None,
+    ) -> list[Tool]:
+        orm_tools = (
+            await self.repo.list_for_org(org_id)
+            if org_id
+            else await self.repo.list_all()
+        )
+        tools = [orm_to_domain(t) for t in orm_tools]
+        if category is not None:
+            tools = [t for t in tools if t.category == category]
+        return tools
+
+    # ------------------------------------------------------------------
+    # Update
+    # ------------------------------------------------------------------
 
     async def update_tool(
         self,
@@ -103,11 +150,12 @@ class ToolService:
         *,
         name: str | None = None,
         description: str | None = None,
-        category: str | None = None,
-        input_schema: dict | None = None,
-        output_schema: dict | None = None,
-        safety_level: int | None = None,
+        category: ToolCategory | None = None,
+        input_schema: dict[str, Any] | None = None,
+        output_schema: dict[str, Any] | None = None,
+        safety_level: SafetyLevel | None = None,
         required_capabilities: list[str] | None = None,
+        runtime_binding: str | None = None,
         correlation_id: str | None = None,
     ) -> Tool:
         existing = orm_to_domain(await self.repo.get_by_grn(grn_str))
@@ -115,18 +163,31 @@ class ToolService:
         updated = existing.model_copy(
             update={
                 "name": name if name is not None else existing.name,
-                "description": description if description is not None else existing.description,
+                "description": (
+                    description if description is not None else existing.description
+                ),
                 "category": category if category is not None else existing.category,
-                "input_schema": input_schema if input_schema is not None else existing.input_schema,
-                "output_schema": output_schema if output_schema is not None else existing.output_schema,
-                "safety_level": safety_level if safety_level is not None else existing.safety_level,
+                "input_schema": (
+                    input_schema if input_schema is not None else existing.input_schema
+                ),
+                "output_schema": (
+                    output_schema if output_schema is not None else existing.output_schema
+                ),
+                "safety_level": (
+                    safety_level if safety_level is not None else existing.safety_level
+                ),
                 "required_capabilities": (
                     required_capabilities
                     if required_capabilities is not None
                     else existing.required_capabilities
                 ),
+                "runtime_binding": (
+                    runtime_binding
+                    if runtime_binding is not None
+                    else existing.runtime_binding
+                ),
                 "updated_by": updated_by,
-                "updated_at": utcnow(),
+                "updated_at": _utcnow(),
                 "version": existing.version + 1,
                 "state": ResourceState.ACTIVE,
             }
@@ -147,6 +208,10 @@ class ToolService:
             )
             await self.repo.session.commit()
         return orm_to_domain(persisted)
+
+    # ------------------------------------------------------------------
+    # Delete
+    # ------------------------------------------------------------------
 
     async def delete_tool(
         self,

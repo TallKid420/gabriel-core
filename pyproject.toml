@@ -17,6 +17,7 @@ dependencies = [
     "asyncpg",
     "langgraph",
     "python-multipart",
+    "pgvector",
 ]
 
 [tool.setuptools]
