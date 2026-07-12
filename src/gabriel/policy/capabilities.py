@@ -49,6 +49,14 @@ ACTION_CAPABILITY_MAP: dict[str, Capability] = {
     "identity:read": Capability.READ_PRINCIPAL,
     # Organization
     "organization:read": Capability.READ_ORGANIZATION,
+    "organization:create": Capability.WRITE_RESOURCE,
+    "organization:update": Capability.MANAGE_PRINCIPALS,
+    "organization:delete": Capability.SYSTEM_ADMIN,
+    # Users (org-scoped accounts mirrored to principals)
+    "user:create": Capability.MANAGE_PRINCIPALS,
+    "user:read": Capability.READ_PRINCIPAL,
+    "user:update": Capability.MANAGE_PRINCIPALS,
+    "user:delete": Capability.MANAGE_PRINCIPALS,
     # Policy administration
     "policy:create": Capability.MANAGE_POLICIES,
     "policy:update": Capability.MANAGE_POLICIES,

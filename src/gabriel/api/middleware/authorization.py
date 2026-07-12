@@ -93,6 +93,7 @@ _DOMAIN_BY_PREFIX = {
     "executions": "agent",
     "organizations": "organization",
     "identities": "identity",
+    "users": "user",
 }
 
 _VERB_BY_METHOD = {

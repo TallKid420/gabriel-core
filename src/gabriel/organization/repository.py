@@ -22,6 +22,13 @@ class OrganizationRepository:
             raise ResourceNotFoundError(f"Organization {grn} not found")
         return org
 
+    async def get_by_org_id(self, org_id: str) -> OrganizationORM | None:
+        """Return the organization whose tenant id is ``org_id``, or None."""
+        result = await self.session.execute(
+            select(OrganizationORM).filter_by(org_id=org_id)
+        )
+        return result.scalar_one_or_none()
+
     async def list_all(self) -> list[OrganizationORM]:
         result = await self.session.execute(select(OrganizationORM))
         return list(result.scalars().all())

@@ -3,6 +3,13 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 
 from gabriel.database.base import Base
 
+# Import ORM models so Base.metadata knows every table before create_all.
+import gabriel.organization.orm  # noqa: F401
+import gabriel.organization.membership_orm  # noqa: F401
+import gabriel.identity.orm  # noqa: F401
+import gabriel.events.orm  # noqa: F401
+import gabriel.user.orm  # noqa: F401
+
 # In-memory SQLite for fast, isolated tests (no Postgres required).
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 

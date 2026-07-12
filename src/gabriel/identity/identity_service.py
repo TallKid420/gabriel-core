@@ -28,6 +28,7 @@ from gabriel.identity.principal import Principal
 from gabriel.identity.principal_id import PrincipalID
 from gabriel.identity.providers.base import IdentityProvider
 from gabriel.identity.providers.dev import DevIdentityProvider
+from gabriel.identity.providers.password import PasswordIdentityProvider
 from gabriel.identity.providers.production import ProductionIdentityProvider
 from gabriel.identity.providers.registry import ProviderRegistry
 from gabriel.identity.token import Token, TokenPayload
@@ -141,12 +142,21 @@ def build_key_manager(settings: IdentitySettings) -> KeyManager:
 
 def build_default_identity_service(
     settings: IdentitySettings | None = None,
+    session_factory: Any | None = None,
 ) -> IdentityService:
     """Construct an IdentityService wired with the default provider set.
 
     The development provider is only registered outside production and when
-    enabled. In production with no real provider configured yet, the service
-    still starts (JWKS/verification work); login simply reports no methods.
+    enabled. The password provider is registered whenever a database session
+    factory is available (it is the first *real* method and works in every
+    environment). In production with no real provider configured yet, the
+    service still starts (JWKS/verification work); login reports no methods.
+
+    Args:
+        settings: Identity settings; defaults to environment-derived settings.
+        session_factory: Async SQLAlchemy session factory used by DB-backed
+            providers (password, production). Defaults to the module-level
+            ``async_session`` factory.
     """
     settings = settings or IdentitySettings.from_env()
     if settings.is_production and settings.dev_auth_enabled:
@@ -159,12 +169,14 @@ def build_default_identity_service(
     token_service = TokenService(
         key_manager, token_expiry_seconds=settings.token_ttl_seconds
     )
+    db_sessions = session_factory or async_session
 
     providers: list[IdentityProvider] = []
     if settings.dev_auth_enabled and not settings.is_production:
         providers.append(DevIdentityProvider(settings))
+    providers.append(PasswordIdentityProvider(db_sessions))
     if settings.is_production:
-        providers.append(ProductionIdentityProvider(token_service, async_session))
+        providers.append(ProductionIdentityProvider(token_service, db_sessions))
 
     assert not settings.is_production or all(
         provider.name != "dev" for provider in providers

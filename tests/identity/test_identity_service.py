@@ -85,10 +85,14 @@ async def test_rotation_keeps_existing_tokens_valid(service):
 
 def test_production_disables_dev_provider():
     prod = build_default_identity_service(
-        IdentitySettings(environment="production")
+        IdentitySettings(environment="production", dev_auth_enabled=False)
     )
-    # No providers registered in production until a real one is configured.
-    assert prod.available_methods() == []
+    # Dev provider must never register in production; real providers
+    # (password, production-token) are the only available methods.
+    methods = prod.available_methods()
+    assert "dev" not in methods
+    assert "password" in methods
+    assert "production" in methods
     # JWKS/verification infrastructure still works.
     assert prod.jwks()["keys"]
 
