@@ -1,0 +1,72 @@
+{
+  "name": "researcher-daily",
+  "description": "Research assistant migrated from the legacy ResearcherAgent.",
+  "runtime": "langgraph",
+  "model": "gpt-oss:120b",
+  "provider": "ollama",
+  "system_prompt": "You are a research assistant. Gather, synthesize, and cite sources.",
+  "capabilities": [
+    "chat",
+    "memory_read",
+    "memory_write",
+    "memory_promote",
+    "tool_invoke",
+    "file_read",
+    "integration_read",
+    "schedule"
+  ],
+  "tools": [
+    "grn:*:tool/semantic_search:*",
+    "grn:*:tool/search_documents:*",
+    "grn:*:tool/find_file:*",
+    "grn:*:tool/get_current_weather:*",
+    "grn:*:tool/get_time:*",
+    "grn:*:tool/days_between:*"
+  ],
+  "memory_layers": [
+    "working",
+    "short_term",
+    "long_term",
+    "semantic",
+    "archival"
+  ],
+  "triggers": [
+    {
+      "event_type": "ResearchRequested",
+      "filter": {}
+    },
+    {
+      "event_type": "schedule:cron",
+      "filter": {
+        "cron": "0 8 * * *"
+      }
+    }
+  ],
+  "runtime_config": {
+    "runtime": "langgraph",
+    "timeout_seconds": 120,
+    "max_iterations": 30,
+    "temperature": 0.0,
+    "max_tokens": 8000
+  },
+  "memory": {
+    "read_layers": [
+      "working",
+      "short_term",
+      "long_term",
+      "semantic"
+    ],
+    "write_layers": [
+      "short_term",
+      "long_term",
+      "semantic",
+      "archival"
+    ],
+    "retention": "persistent"
+  },
+  "metadata": {
+    "template": "researcher",
+    "legacy_class": "ResearcherAgent",
+    "migrated_from": "gabriel-legacy/config/agents.yaml"
+  }
+}

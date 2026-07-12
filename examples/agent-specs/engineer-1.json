@@ -1,0 +1,69 @@
+{
+  "name": "engineer-1",
+  "description": "Software-engineering assistant migrated from the legacy EngineerAgent.",
+  "runtime": "langgraph",
+  "model": "gpt-oss:120b",
+  "provider": "ollama",
+  "system_prompt": "You are an engineering assistant. Be precise and cite file references.",
+  "capabilities": [
+    "chat",
+    "memory_read",
+    "memory_write",
+    "tool_invoke",
+    "file_read",
+    "file_write"
+  ],
+  "tools": [
+    "grn:*:tool/find_file:*",
+    "grn:*:tool/search_documents:*",
+    "grn:*:tool/semantic_search:*",
+    "grn:*:tool/calculate:*",
+    "grn:*:tool/convert_units:*",
+    "grn:*:tool/hash_text:*",
+    "grn:*:tool/get_time:*"
+  ],
+  "memory_layers": [
+    "working",
+    "short_term",
+    "long_term",
+    "procedural"
+  ],
+  "triggers": [
+    {
+      "event_type": "UserMessageReceived",
+      "filter": {}
+    },
+    {
+      "event_type": "api:POST:/chat/send",
+      "filter": {
+        "channel": "engineer"
+      }
+    }
+  ],
+  "runtime_config": {
+    "runtime": "langgraph",
+    "timeout_seconds": 60,
+    "max_iterations": 25,
+    "temperature": 0.0,
+    "max_tokens": 10000
+  },
+  "memory": {
+    "read_layers": [
+      "working",
+      "short_term",
+      "long_term",
+      "procedural"
+    ],
+    "write_layers": [
+      "working",
+      "short_term",
+      "long_term"
+    ],
+    "retention": "persistent"
+  },
+  "metadata": {
+    "template": "engineer",
+    "legacy_class": "EngineerAgent",
+    "migrated_from": "gabriel-legacy/config/agents.yaml"
+  }
+}
