@@ -1,114 +1,134 @@
+"""API tests for the DB-backed /api/v1/agents management endpoints (Phase 2)."""
 from __future__ import annotations
+
+from uuid import uuid4
+
+
+def _unique_org() -> str:
+    # The API fallback DB persists across runs — isolate each test in its own org.
+    return f"org-{uuid4().hex[:12]}"
+
+
+def _create_payload(name: str) -> dict:
+    return {
+        "name": name,
+        "description": "Answers support tickets",
+        "system_prompt": "You are a helpful support agent.",
+        "model_config": {
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "temperature": 0.2,
+            "max_tokens": 512,
+        },
+        "allowed_tools": ["search", "kb.lookup"],
+        "knowledge_sources": ["grn:acme:document/d1:1"],
+        "status": "active",
+    }
 
 
 def test_agent_list_requires_authentication(client):
-        response = client.get("/agents")
-        assert response.status_code == 401
+    response = client.get("/api/v1/agents")
+    assert response.status_code == 401
 
 
-def test_agent_list_returns_empty_list_for_authenticated_user_with_no_agents(client, make_auth_headers):
-        other_headers = make_auth_headers(
-                org="initech",
-                identifier="sam",
-                capabilities=("read_resource", "write_resource", "execute_workflow"),
-                correlation_id="55555555-5555-5555-5555-555555555555",
-        )
-
-        response = client.get("/agents", headers=other_headers)
-        assert response.status_code == 200
-        assert response.json() == []
+def test_agent_list_empty_for_fresh_org(client, make_auth_headers):
+    headers = make_auth_headers(org=_unique_org(), identifier="sam")
+    response = client.get("/api/v1/agents", headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["items"] == []
+    assert body["total"] == 0
 
 
-def test_agent_list_is_scoped_to_authenticated_tenant(client, auth_headers):
-        create_response = client.post(
-                "/agents",
-                json={
-                        "name": "support-agent",
-                        "runtime": "mock",
-                        "config": {"provider": "openai", "model": "gpt-4o-mini"},
-                },
-                headers=auth_headers,
-        )
-        assert create_response.status_code == 201
-        created_grn = create_response.json()["grn"]
+def test_agent_create_and_get(client, make_auth_headers):
+    org = _unique_org()
+    headers = make_auth_headers(org=org, identifier="alice")
 
-        response = client.get("/agents", headers=auth_headers)
-        assert response.status_code == 200
-        agents = response.json()
-        match = next(item for item in agents if item["id"] == created_grn)
-        assert match["name"] == "support-agent"
-        assert match["status"] == "active"
-        assert match["enabled"] is True
-        assert match["provider"] == "openai"
-        assert match["model"] == "gpt-4o-mini"
+    create = client.post(
+        "/api/v1/agents", json=_create_payload("support-bot"), headers=headers
+    )
+    assert create.status_code == 201, create.text
+    created = create.json()
+    assert created["grn"].startswith(f"grn:{org}:agent/")
+    assert created["name"] == "support-bot"
+    assert created["status"] == "active"
+    assert created["enabled"] is True
+    assert created["model_config"]["provider"] == "openai"
+    assert created["model_config"]["temperature"] == 0.2
+    assert created["allowed_tools"] == ["search", "kb.lookup"]
+    assert created["knowledge_sources"] == ["grn:acme:document/d1:1"]
 
-
-def test_agent_list_does_not_cross_tenants(client, auth_headers, make_auth_headers):
-        create_response = client.post(
-                "/agents",
-                json={"name": "tenant-agent", "runtime": "mock", "config": {}},
-                headers=auth_headers,
-        )
-        assert create_response.status_code == 201
-        created_grn = create_response.json()["grn"]
-
-        other_headers = make_auth_headers(
-                org="globex",
-                identifier="bob",
-                capabilities=("read_resource", "write_resource", "execute_workflow"),
-                correlation_id="44444444-4444-4444-4444-444444444444",
-        )
-
-        response = client.get("/agents", headers=other_headers)
-        assert response.status_code == 200
-        assert all(item["id"] != created_grn for item in response.json())
-        assert response.json() == []
+    fetched = client.get(f"/api/v1/agents/{created['grn']}", headers=headers)
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["grn"] == created["grn"]
 
 
-def test_agent_creation_and_execution_emit_events(client, auth_headers):
-        create_response = client.post(
-                "/agents",
-                json={"name": "support-agent", "runtime": "mock", "config": {"temperature": 0.2}},
-                headers=auth_headers,
-        )
-        assert create_response.status_code == 201
-        created = create_response.json()
-        grn = created["grn"]
+def test_agent_list_scoped_to_tenant(client, make_auth_headers):
+    org = _unique_org()
+    headers = make_auth_headers(org=org, identifier="alice")
+    other_headers = make_auth_headers(org=_unique_org(), identifier="bob")
 
-        execute_response = client.post(
-                f"/agents/{grn}/execute",
-                json={"input": {"prompt": "hello"}},
-                headers=auth_headers,
-        )
-        assert execute_response.status_code == 200
-        assert execute_response.json()["last_event"] == "agent_executed"
+    create = client.post(
+        "/api/v1/agents", json=_create_payload("tenant-agent"), headers=headers
+    )
+    assert create.status_code == 201, create.text
+    grn = create.json()["grn"]
 
-        events_response = client.get("/events", headers=auth_headers)
-        assert events_response.status_code == 200
-        event_types = [item["type"] for item in events_response.json()["items"]]
-        assert "agent_created" in event_types
-        assert "agent_executed" in event_types
+    mine = client.get("/api/v1/agents", headers=headers).json()
+    assert [item["grn"] for item in mine["items"]] == [grn]
+
+    theirs = client.get("/api/v1/agents", headers=other_headers).json()
+    assert theirs["items"] == []
+
+    # Direct cross-tenant fetch is forbidden.
+    cross = client.get(f"/api/v1/agents/{grn}", headers=other_headers)
+    assert cross.status_code == 403
 
 
-def test_deleted_agent_is_removed_from_agent_list(client, auth_headers):
-        create_response = client.post(
-                "/agents",
-                json={"name": "delete-me", "runtime": "mock", "config": {}},
-                headers=auth_headers,
-        )
-        assert create_response.status_code == 201
-        grn = create_response.json()["grn"]
+def test_agent_update(client, make_auth_headers):
+    org = _unique_org()
+    headers = make_auth_headers(org=org, identifier="alice")
+    grn = client.post(
+        "/api/v1/agents", json=_create_payload("update-me"), headers=headers
+    ).json()["grn"]
 
-        delete_response = client.delete(f"/agents/{grn}", headers=auth_headers)
-        assert delete_response.status_code == 200
-        assert delete_response.json() == {"deleted": True, "grn": grn}
+    update = client.patch(
+        f"/api/v1/agents/{grn}",
+        json={
+            "description": "Updated",
+            "status": "inactive",
+            "allowed_tools": ["search"],
+            "model_config": {"provider": "anthropic", "model": "claude-3"},
+        },
+        headers=headers,
+    )
+    assert update.status_code == 200, update.text
+    body = update.json()
+    assert body["description"] == "Updated"
+    assert body["status"] == "inactive"
+    assert body["enabled"] is False
+    assert body["allowed_tools"] == ["search"]
+    assert body["model_config"]["provider"] == "anthropic"
 
-        list_response = client.get("/agents", headers=auth_headers)
-        assert list_response.status_code == 200
-        assert all(item["id"] != grn for item in list_response.json())
 
-        events_response = client.get("/events", headers=auth_headers)
-        assert events_response.status_code == 200
-        event_types = [item["type"] for item in events_response.json()["items"]]
-        assert "agent_deleted" in event_types
+def test_agent_delete(client, make_auth_headers):
+    org = _unique_org()
+    headers = make_auth_headers(org=org, identifier="alice")
+    grn = client.post(
+        "/api/v1/agents", json=_create_payload("delete-me"), headers=headers
+    ).json()["grn"]
 
+    delete = client.delete(f"/api/v1/agents/{grn}", headers=headers)
+    assert delete.status_code == 200, delete.text
+    assert delete.json()["deleted"] is True
+
+    missing = client.get(f"/api/v1/agents/{grn}", headers=headers)
+    assert missing.status_code == 404
+
+
+def test_agent_unknown_status_rejected(client, make_auth_headers):
+    headers = make_auth_headers(org=_unique_org(), identifier="alice")
+    payload = _create_payload("bad-status")
+    payload["status"] = "nonsense"
+    response = client.post("/api/v1/agents", json=payload, headers=headers)
+    assert response.status_code == 422

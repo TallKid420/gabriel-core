@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gabriel.agent.orm import AgentORM
@@ -25,6 +25,24 @@ class AgentRepository:
     async def list_for_org(self, org_id: str) -> list[AgentORM]:
         result = await self.session.execute(select(AgentORM).filter_by(org_id=org_id))
         return list(result.scalars().all())
+
+    async def list_for_org_paginated(
+        self, org_id: str, *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[AgentORM], int]:
+        """Return (page, total) of agents for an organization, newest first."""
+        total = (
+            await self.session.execute(
+                select(func.count(AgentORM.grn)).filter_by(org_id=org_id)
+            )
+        ).scalar_one()
+        result = await self.session.execute(
+            select(AgentORM)
+            .filter_by(org_id=org_id)
+            .order_by(AgentORM.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(result.scalars().all()), int(total)
 
     async def list_all(self) -> list[AgentORM]:
         result = await self.session.execute(select(AgentORM))

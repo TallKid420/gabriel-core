@@ -94,6 +94,8 @@ _DOMAIN_BY_PREFIX = {
     "organizations": "organization",
     "identities": "identity",
     "users": "user",
+    "conversations": "conversation",
+    "notifications": "notification",
 }
 
 _VERB_BY_METHOD = {

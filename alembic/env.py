@@ -25,6 +25,10 @@ import gabriel.integration.orm  # noqa: E402, F401  # registers ExternalIntegrat
 import gabriel.user.orm  # noqa: E402, F401  # registers UserORM
 import gabriel.organization.membership_orm  # noqa: E402, F401  # registers OrgMembershipORM
 import gabriel.identity.refresh  # noqa: E402, F401  # registers RefreshTokenORM
+import gabriel.conversation.orm  # noqa: E402, F401  # registers ConversationORM
+import gabriel.conversation.message_orm  # noqa: E402, F401  # registers MessageORM
+import gabriel.notification.orm  # noqa: E402, F401  # registers NotificationORM
+import gabriel.memory.layer_orm  # noqa: E402, F401  # registers MemoryLayerEntryORM
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

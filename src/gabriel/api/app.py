@@ -9,6 +9,8 @@ from gabriel.api.middleware import register_middleware
 from gabriel.api.routers import (
     agents,
     agent_specs,
+    conversations,
+    memory_layers,
     documents,
     events,
     executions,
@@ -31,6 +33,10 @@ def register_routers(app: FastAPI) -> None:
     v1.include_router(agents.router)
     v1.include_router(agent_specs.router)
     v1.include_router(documents.router)
+    v1.include_router(conversations.router)
+    # memory_layers must be registered before the legacy /memory router so the
+    # more specific /memory/layers prefix wins.
+    v1.include_router(memory_layers.router)
     v1.include_router(memory.router)
     v1.include_router(events.router)
     v1.include_router(executions.router)
