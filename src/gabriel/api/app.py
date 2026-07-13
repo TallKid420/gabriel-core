@@ -17,6 +17,7 @@ from gabriel.api.routers import (
     memory,
     organizations,
     resources,
+    users,
     chat,
     notifications,
 )
@@ -34,6 +35,7 @@ def register_routers(app: FastAPI) -> None:
     v1.include_router(events.router)
     v1.include_router(executions.router)
     v1.include_router(organizations.router)
+    v1.include_router(users.router)
     v1.include_router(auth.router)
     v1.include_router(chat.router)
     v1.include_router(notifications.router)

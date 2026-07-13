@@ -39,6 +39,11 @@ import gabriel.events.orm  # noqa: F401
 import gabriel.resource.read_model_orm  # noqa: F401
 import gabriel.events.projections.audit_projection  # noqa: F401
 import gabriel.policy.orm  # noqa: F401
+import gabriel.organization.orm  # noqa: F401
+import gabriel.organization.membership_orm  # noqa: F401
+import gabriel.identity.orm  # noqa: F401
+import gabriel.identity.refresh  # noqa: F401
+import gabriel.user.orm  # noqa: F401
 
 
 class SimpleCommandHandler(Handler):
@@ -386,8 +391,15 @@ async def initialize_gateway_state(app) -> None:
 
         app.state.peel = peel
 
+        # Database session factory for request-scoped services (auth, users, orgs).
+        app.state.db_session_factory = policy_session_factory
+
         # Identity Service: authentication boundary (issues/verifies signed tokens).
-        app.state.identity_service = build_default_identity_service()
+        # The working session factory is injected so DB-backed providers
+        # (password, production) use the same database as the rest of the app.
+        app.state.identity_service = build_default_identity_service(
+                session_factory=policy_session_factory
+        )
 
 
 def get_gateway_state(request: Request) -> GatewayState:
@@ -401,6 +413,12 @@ def get_gateway_service(request: Request) -> GatewayService:
 
 def get_identity_service(request: Request) -> IdentityService:
         return request.app.state.identity_service
+
+
+def get_db_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
+        """Return the application-wide async session factory."""
+        factory = getattr(request.app.state, "db_session_factory", None)
+        return factory if factory is not None else async_session
 
 
 def get_agent_service(request: Request) -> AgentService:

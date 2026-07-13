@@ -34,3 +34,14 @@ def register_identity_resource_types(target_registry: ResourceRegistry | None = 
             version="1.0",
             tags=frozenset({"identity", "core"}),
         )
+
+    # Imported lazily to avoid a circular import (gabriel.user imports identity).
+    from gabriel.user.models import User
+
+    if not reg.is_registered("user"):
+        reg.register(
+            User,
+            description="Human user account with credentials, mirrored to a Principal",
+            version="1.0",
+            tags=frozenset({"identity", "core"}),
+        )
