@@ -35,10 +35,25 @@ ACTION_CAPABILITY_MAP: dict[str, Capability] = {
     "agent:disable": Capability.WRITE_RESOURCE,
     "agent:enable": Capability.WRITE_RESOURCE,
     "agent:read": Capability.READ_RESOURCE,
+    "agent:update": Capability.WRITE_RESOURCE,
+    "agent:delete": Capability.WRITE_RESOURCE,
     # Memory
     "memory:write": Capability.WRITE_RESOURCE,
+    "memory:create": Capability.WRITE_RESOURCE,
+    "memory:update": Capability.WRITE_RESOURCE,
     "memory:delete": Capability.WRITE_RESOURCE,
     "memory:read": Capability.READ_RESOURCE,
+    # Conversations & messages
+    "conversation:create": Capability.WRITE_RESOURCE,
+    "conversation:read": Capability.READ_RESOURCE,
+    "conversation:update": Capability.WRITE_RESOURCE,
+    "conversation:delete": Capability.WRITE_RESOURCE,
+    "message:create": Capability.WRITE_RESOURCE,
+    "message:read": Capability.READ_RESOURCE,
+    # Notifications
+    "notification:create": Capability.WRITE_RESOURCE,
+    "notification:read": Capability.READ_RESOURCE,
+    "notification:update": Capability.WRITE_RESOURCE,
     # Documents (ingestion)
     "document:create": Capability.WRITE_RESOURCE,
     "document:ingest": Capability.WRITE_RESOURCE,

@@ -105,16 +105,78 @@ def register_core_resource_types(target_registry: ResourceRegistry | None = None
             ),
         )
 
-    # # Register the Notification resource type (ingestion target).
-    # if not reg.is_registered("notification"):
-    #     from gabriel.notification.models import Notification
+    # Register the Conversation resource type (Phase 2 — Core Business Logic).
+    if not reg.is_registered("conversation"):
+        from gabriel.conversation.models import Conversation
 
-    #     reg.register(
-    #         Notification,
-    #         description="Notification resource",
-    #         version="1.0",
-    #         tags=frozenset({"core", "notification"}),
-    #     )
+        reg.register(
+            Conversation,
+            description="Conversation resource",
+            version="1.0",
+            tags=frozenset({"core", "conversation"}),
+            capabilities=frozenset(
+                {
+                    "conversation:create",
+                    "conversation:read",
+                    "conversation:update",
+                    "conversation:delete",
+                }
+            ),
+        )
+
+    # Register the Message resource type (Phase 2 — Core Business Logic).
+    if not reg.is_registered("message"):
+        from gabriel.conversation.message_models import Message
+
+        reg.register(
+            Message,
+            description="Conversation message resource",
+            version="1.0",
+            tags=frozenset({"core", "conversation"}),
+            capabilities=frozenset(
+                {
+                    "message:create",
+                    "message:read",
+                }
+            ),
+        )
+
+    # Register the Notification resource type (Phase 2 — Core Business Logic).
+    if not reg.is_registered("notification"):
+        from gabriel.notification.models import Notification
+
+        reg.register(
+            Notification,
+            description="Notification resource",
+            version="1.0",
+            tags=frozenset({"core", "notification"}),
+            capabilities=frozenset(
+                {
+                    "notification:create",
+                    "notification:read",
+                    "notification:update",
+                }
+            ),
+        )
+
+    # Register the MemoryLayerEntry resource type (Phase 2 — Core Business Logic).
+    if not reg.is_registered("memory_layer_entry"):
+        from gabriel.memory.layer_models import MemoryLayerEntry
+
+        reg.register(
+            MemoryLayerEntry,
+            description="Governed memory layer entry",
+            version="1.0",
+            tags=frozenset({"core", "memory"}),
+            capabilities=frozenset(
+                {
+                    "memory:create",
+                    "memory:read",
+                    "memory:update",
+                    "memory:delete",
+                }
+            ),
+        )
 
     # Register identity types (Principal, future: User, Agent, etc.)
     from gabriel.identity.bootstrap import register_identity_resource_types

@@ -44,6 +44,11 @@ import gabriel.organization.membership_orm  # noqa: F401
 import gabriel.identity.orm  # noqa: F401
 import gabriel.identity.refresh  # noqa: F401
 import gabriel.user.orm  # noqa: F401
+import gabriel.agent.orm  # noqa: F401
+import gabriel.conversation.orm  # noqa: F401
+import gabriel.conversation.message_orm  # noqa: F401
+import gabriel.notification.orm  # noqa: F401
+import gabriel.memory.layer_orm  # noqa: F401
 
 
 class SimpleCommandHandler(Handler):

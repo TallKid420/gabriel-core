@@ -31,6 +31,9 @@ class ResourceType(str, Enum):
     CONNECTOR    = "connector"
     DOCUMENT     = "document"
     FILE         = "file"
+    CONVERSATION = "conversation"
+    MESSAGE      = "message"
+    NOTIFICATION = "notification"
 
 class Resource(BaseModel):
     grn: GRN

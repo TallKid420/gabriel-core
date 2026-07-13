@@ -33,6 +33,7 @@ class AgentSpecification(BaseModel):
     system_prompt: str = ""
     capabilities: list[str] = Field(default_factory=list)
     tools: list[str] = Field(default_factory=list)
+    knowledge_sources: list[str] = Field(default_factory=list)
     memory_layers: list[str] = Field(default_factory=list)
     triggers: list[Trigger | str] = Field(default_factory=list)
     runtime_config: RuntimeConfiguration | None = None
