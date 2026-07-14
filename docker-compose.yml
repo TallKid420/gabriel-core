@@ -1,0 +1,58 @@
+# Docker Compose for Gabriel local development.
+#
+# Brings up the two external dependencies Gabriel needs:
+#   - PostgreSQL 16 with the pgvector extension (vector similarity search)
+#   - Ollama (local LLM + embedding runtime)
+#
+# The Gabriel API itself is intended to run on the host (uvicorn) for fast reloads;
+# these defaults (db name / user / password / ports) match the connection strings in
+# src/gabriel/database/session.py and alembic.ini.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose ps                     # wait until both are "healthy"
+#   docker compose exec ollama ollama pull llama3.2
+#   docker compose exec ollama ollama pull nomic-embed-text
+
+services:
+  postgres:
+    # pgvector/pgvector ships PostgreSQL with the vector extension preinstalled.
+    image: pgvector/pgvector:pg16
+    container_name: gabriel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gabriel_core
+    ports:
+      - "5432:5432"
+    volumes:
+      - gabriel_pgdata:/var/lib/postgresql/data
+      # Enable the vector extension automatically on first initialization.
+      - ./docker/postgres/init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gabriel_core"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: gabriel-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - gabriel_ollama:/root/.ollama
+    healthcheck:
+      # The Ollama image bundles curl; hit the version endpoint to confirm readiness.
+      test: ["CMD-SHELL", "ollama --version >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  gabriel_pgdata:
+  gabriel_ollama:
