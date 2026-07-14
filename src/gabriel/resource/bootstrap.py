@@ -43,6 +43,14 @@ def register_core_resource_types(target_registry: ResourceRegistry | None = None
             description="Ingested document resource",
             version="1.0",
             tags=frozenset({"core", "content"}),
+            capabilities=frozenset(
+                {
+                    "document:create",
+                    "document:read",
+                    "document:update",
+                    "document:delete",
+                }
+            ),
         )
 
     # Register Agent resource type (ingestion target).
@@ -174,6 +182,26 @@ def register_core_resource_types(target_registry: ResourceRegistry | None = None
                     "memory:read",
                     "memory:update",
                     "memory:delete",
+                }
+            ),
+        )
+
+    # Register the KnowledgeSource resource type (Phase 4 — Document & Knowledge).
+    if not reg.is_registered("knowledge_source"):
+        from gabriel.knowledge.source_models import KnowledgeSource
+
+        reg.register(
+            KnowledgeSource,
+            description="Knowledge source (document collection for RAG)",
+            version="1.0",
+            tags=frozenset({"core", "knowledge"}),
+            capabilities=frozenset(
+                {
+                    "knowledge:create",
+                    "knowledge:read",
+                    "knowledge:update",
+                    "knowledge:delete",
+                    "knowledge:search",
                 }
             ),
         )

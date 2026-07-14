@@ -97,6 +97,7 @@ _DOMAIN_BY_PREFIX = {
     "conversations": "conversation",
     "notifications": "notification",
     "gateway": "gateway",
+    "knowledge": "knowledge",
 }
 
 _VERB_BY_METHOD = {
@@ -146,6 +147,9 @@ def _derive_action(request: Request) -> str | None:
     verb = _VERB_BY_METHOD.get(request.method.upper(), "read")
     if domain == "agent" and request.method.upper() == "POST" and segments[-1] == "execute":
         verb = "execute"
+    # Knowledge search is a read-shaped POST (query in the body).
+    if domain == "knowledge" and request.method.upper() == "POST" and segments[-1] == "search":
+        verb = "search"
     return f"{domain}:{verb}"
 
 

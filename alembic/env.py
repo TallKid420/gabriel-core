@@ -25,6 +25,9 @@ import gabriel.integration.orm  # noqa: E402, F401  # registers ExternalIntegrat
 import gabriel.user.orm  # noqa: E402, F401  # registers UserORM
 import gabriel.organization.membership_orm  # noqa: E402, F401  # registers OrgMembershipORM
 import gabriel.identity.refresh  # noqa: E402, F401  # registers RefreshTokenORM
+import gabriel.document.orm  # noqa: E402, F401  # registers DocumentORM
+import gabriel.knowledge.chunk_orm  # noqa: E402, F401  # registers DocumentChunkORM
+import gabriel.knowledge.source_orm  # noqa: E402, F401  # registers KnowledgeSourceORM
 import gabriel.conversation.orm  # noqa: E402, F401  # registers ConversationORM
 import gabriel.conversation.message_orm  # noqa: E402, F401  # registers MessageORM
 import gabriel.notification.orm  # noqa: E402, F401  # registers NotificationORM
