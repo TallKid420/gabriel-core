@@ -54,13 +54,13 @@ def _encode_request_body(body: bytes) -> tuple[str, str]:
 
 
 async def _capture_request_body(request: Request) -> bytes:
-    body = await request.body()
-
-    async def receive() -> dict[str, object]:
-        return {"type": "http.request", "body": body, "more_body": False}
-
-    request._receive = receive  # type: ignore[attr-defined]
-    return body
+    # Starlette's BaseHTTPMiddleware wraps the request in a ``_CachedRequest``
+    # that replays the consumed body to the downstream app automatically, so
+    # reading it here is safe. Do NOT monkeypatch ``request._receive`` to
+    # re-emit ``http.request`` frames: streaming endpoints (SSE) listen for
+    # ``http.disconnect`` after the body is consumed, and a replayed body
+    # frame crashes the response cycle.
+    return await request.body()
 
 
 async def _log_incoming_request(request: Request, request_id: str) -> None:
@@ -96,6 +96,7 @@ _DOMAIN_BY_PREFIX = {
     "users": "user",
     "conversations": "conversation",
     "notifications": "notification",
+    "gateway": "gateway",
 }
 
 _VERB_BY_METHOD = {
