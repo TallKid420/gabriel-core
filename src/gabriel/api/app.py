@@ -14,6 +14,7 @@ from gabriel.api.routers import (
     documents,
     events,
     executions,
+    gateway,
     health,
     auth,
     memory,
@@ -38,6 +39,7 @@ def register_routers(app: FastAPI) -> None:
     # more specific /memory/layers prefix wins.
     v1.include_router(memory_layers.router)
     v1.include_router(memory.router)
+    v1.include_router(gateway.router)
     v1.include_router(events.router)
     v1.include_router(executions.router)
     v1.include_router(organizations.router)

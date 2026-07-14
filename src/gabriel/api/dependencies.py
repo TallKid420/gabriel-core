@@ -28,6 +28,12 @@ from gabriel.identity.identity_service import (
     IdentityService,
     build_default_identity_service,
 )
+from gabriel.gateway.providers.registry import (
+    ProviderRegistry,
+    register_default_providers,
+)
+from gabriel.gateway.sessions import SessionManager
+from gabriel.gateway.tools import build_default_tool_registry
 from gabriel.policy.engine import PolicyEngine
 from gabriel.policy.models import PolicyStatement
 from gabriel.policy.peel import PEEL
@@ -406,6 +412,16 @@ async def initialize_gateway_state(app) -> None:
                 session_factory=policy_session_factory
         )
 
+        # Gateway AI Runtime (Phase 3): LLM providers, runtime tools, and
+        # ephemeral chat sessions. Providers are config-driven (env override
+        # for the Ollama endpoint); registries are per-app instances so tests
+        # can swap in fakes via app.state.
+        provider_registry = ProviderRegistry()
+        register_default_providers(provider_registry)
+        app.state.llm_provider_registry = provider_registry
+        app.state.runtime_tool_registry = build_default_tool_registry()
+        app.state.chat_session_manager = SessionManager()
+
 
 def get_gateway_state(request: Request) -> GatewayState:
         return request.app.state.gateway_state
@@ -446,6 +462,28 @@ def get_document_ingestion_service(request: Request):
         return DocumentIngestionService(
                 dispatcher=state.dispatcher,
                 content_store=DiskContentStore(Path(".gabriel/content")),
+        )
+
+
+def get_provider_registry(request: Request) -> ProviderRegistry:
+        """LLM provider registry initialized at app startup (Phase 3)."""
+        return request.app.state.llm_provider_registry
+
+
+def get_session_manager(request: Request) -> SessionManager:
+        """Ephemeral chat session manager (Phase 3)."""
+        return request.app.state.chat_session_manager
+
+
+def get_chat_runtime_service(request: Request):
+        """ChatRuntimeService wired to the app's registries and DB sessions."""
+        from gabriel.gateway.service import ChatRuntimeService
+
+        return ChatRuntimeService(
+                session_factory=get_db_session_factory(request),
+                providers=request.app.state.llm_provider_registry,
+                tools=request.app.state.runtime_tool_registry,
+                sessions=request.app.state.chat_session_manager,
         )
 
 

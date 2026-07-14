@@ -90,6 +90,12 @@ ACTION_CAPABILITY_MAP: dict[str, Capability] = {
     "integration:read": Capability.READ_RESOURCE,
     "integration:update": Capability.WRITE_RESOURCE,
     "integration:delete": Capability.WRITE_RESOURCE,
+    # Gateway AI runtime (Phase 3): chat turns execute agents, session/provider
+    # introspection is a read, ending a session mutates runtime state.
+    "gateway:create": Capability.EXECUTE_WORKFLOW,
+    "gateway:execute": Capability.EXECUTE_WORKFLOW,
+    "gateway:read": Capability.READ_RESOURCE,
+    "gateway:delete": Capability.WRITE_RESOURCE,
 }
 
 
