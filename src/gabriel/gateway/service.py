@@ -22,7 +22,10 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, avoids import cycles
+    from gabriel.knowledge.retrieval import KnowledgeRetriever
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -67,6 +70,7 @@ class AgentRuntimeConfig:
     max_tokens: int | None
     allowed_tools: list[str] | None
     context_window: int = DEFAULT_CONTEXT_WINDOW
+    knowledge_sources: tuple[str, ...] = ()
 
 
 def sse_event(event: str, data: dict[str, Any]) -> str:
@@ -85,6 +89,7 @@ class ChatRuntimeService:
         tools: RuntimeToolRegistry,
         sessions: SessionManager,
         prompt_assembler: PromptAssembler | None = None,
+        retriever: "KnowledgeRetriever | None" = None,
         max_tool_iterations: int = MAX_TOOL_ITERATIONS,
     ) -> None:
         self._session_factory = session_factory
@@ -92,6 +97,7 @@ class ChatRuntimeService:
         self.tools = tools
         self.sessions = sessions
         self.prompt = prompt_assembler or PromptAssembler()
+        self.retriever = retriever
         self.max_tool_iterations = max_tool_iterations
 
     # ------------------------------------------------------------------
@@ -141,6 +147,7 @@ class ChatRuntimeService:
         temperature = 0.0
         max_tokens: int | None = None
         allowed_tools: list[str] | None = None
+        knowledge_sources: tuple[str, ...] = ()
 
         if agent_grn:
             agent = await self._load_agent(session, agent_grn, org_id)
@@ -154,6 +161,7 @@ class ChatRuntimeService:
             # An agent that declares tools is restricted to them; an agent
             # with no declared tools may use every registered runtime tool.
             allowed_tools = spec.tool_names() or None
+            knowledge_sources = tuple(spec.knowledge_sources or ())
 
         if not model:
             raise ChatRuntimeError(
@@ -168,6 +176,7 @@ class ChatRuntimeService:
             temperature=temperature,
             max_tokens=max_tokens,
             allowed_tools=allowed_tools,
+            knowledge_sources=knowledge_sources,
         )
 
     # ------------------------------------------------------------------
@@ -291,6 +300,24 @@ class ChatRuntimeService:
             yield sse_event("error", {"detail": str(exc)})
             return
         yield sse_event("message", {"grn": str(user_message.grn), "role": "user"})
+
+        # RAG: ground the turn in the agent's knowledge sources (Phase 4).
+        # Retrieval failures degrade to an ungrounded turn — never an error.
+        if self.retriever is not None and config.knowledge_sources:
+            retrieved = await self.retriever.retrieve(
+                org_id=org_id,
+                query=content,
+                knowledge_source_grns=list(config.knowledge_sources),
+            )
+            if retrieved:
+                context_blocks = list(context_blocks or []) + retrieved
+                yield sse_event(
+                    "context",
+                    {
+                        "chunks": len(retrieved),
+                        "sources": [block.source for block in retrieved],
+                    },
+                )
 
         messages = self.prompt.assemble(
             system_prompt=config.system_prompt,

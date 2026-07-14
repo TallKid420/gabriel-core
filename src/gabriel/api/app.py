@@ -12,6 +12,7 @@ from gabriel.api.routers import (
     conversations,
     memory_layers,
     documents,
+    knowledge,
     events,
     executions,
     gateway,
@@ -34,6 +35,7 @@ def register_routers(app: FastAPI) -> None:
     v1.include_router(agents.router)
     v1.include_router(agent_specs.router)
     v1.include_router(documents.router)
+    v1.include_router(knowledge.router)
     v1.include_router(conversations.router)
     # memory_layers must be registered before the legacy /memory router so the
     # more specific /memory/layers prefix wins.

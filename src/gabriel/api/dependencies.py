@@ -55,6 +55,9 @@ import gabriel.conversation.orm  # noqa: F401
 import gabriel.conversation.message_orm  # noqa: F401
 import gabriel.notification.orm  # noqa: F401
 import gabriel.memory.layer_orm  # noqa: F401
+import gabriel.document.orm  # noqa: F401
+import gabriel.knowledge.chunk_orm  # noqa: F401
+import gabriel.knowledge.source_orm  # noqa: F401
 
 
 class SimpleCommandHandler(Handler):
@@ -422,6 +425,21 @@ async def initialize_gateway_state(app) -> None:
         app.state.runtime_tool_registry = build_default_tool_registry()
         app.state.chat_session_manager = SessionManager()
 
+        # Document & Knowledge (Phase 4): hot-swappable embedding providers
+        # (Ollama default) and the RAG retriever used by the chat runtime.
+        from gabriel.knowledge.embeddings import (
+                EmbeddingProviderRegistry,
+                register_default_embedding_providers,
+        )
+        from gabriel.knowledge.retrieval import KnowledgeRetriever
+
+        embedding_registry = EmbeddingProviderRegistry()
+        register_default_embedding_providers(embedding_registry)
+        app.state.embedding_registry = embedding_registry
+        app.state.knowledge_retriever = KnowledgeRetriever(
+                policy_session_factory, registry=embedding_registry
+        )
+
 
 def get_gateway_state(request: Request) -> GatewayState:
         return request.app.state.gateway_state
@@ -475,6 +493,16 @@ def get_session_manager(request: Request) -> SessionManager:
         return request.app.state.chat_session_manager
 
 
+def get_embedding_registry(request: Request):
+        """Embedding provider registry initialized at app startup (Phase 4)."""
+        return request.app.state.embedding_registry
+
+
+def get_knowledge_retriever(request: Request):
+        """RAG retriever wired to the app's embedding registry (Phase 4)."""
+        return getattr(request.app.state, "knowledge_retriever", None)
+
+
 def get_chat_runtime_service(request: Request):
         """ChatRuntimeService wired to the app's registries and DB sessions."""
         from gabriel.gateway.service import ChatRuntimeService
@@ -484,6 +512,7 @@ def get_chat_runtime_service(request: Request):
                 providers=request.app.state.llm_provider_registry,
                 tools=request.app.state.runtime_tool_registry,
                 sessions=request.app.state.chat_session_manager,
+                retriever=get_knowledge_retriever(request),
         )
 
 

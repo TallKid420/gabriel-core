@@ -58,6 +58,14 @@ ACTION_CAPABILITY_MAP: dict[str, Capability] = {
     "document:create": Capability.WRITE_RESOURCE,
     "document:ingest": Capability.WRITE_RESOURCE,
     "document:read": Capability.READ_RESOURCE,
+    "document:update": Capability.WRITE_RESOURCE,
+    "document:delete": Capability.WRITE_RESOURCE,
+    # Knowledge sources & retrieval (Phase 4)
+    "knowledge:create": Capability.WRITE_RESOURCE,
+    "knowledge:read": Capability.READ_RESOURCE,
+    "knowledge:update": Capability.WRITE_RESOURCE,
+    "knowledge:delete": Capability.WRITE_RESOURCE,
+    "knowledge:search": Capability.READ_RESOURCE,
     # Principals / identity administration
     "identity:create_principal": Capability.MANAGE_PRINCIPALS,
     "identity:suspend_principal": Capability.MANAGE_PRINCIPALS,

@@ -34,6 +34,7 @@ class ResourceType(str, Enum):
     CONVERSATION = "conversation"
     MESSAGE      = "message"
     NOTIFICATION = "notification"
+    KNOWLEDGE_SOURCE = "knowledge_source"
 
 class Resource(BaseModel):
     grn: GRN
