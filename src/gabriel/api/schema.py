@@ -152,6 +152,12 @@ class DocumentResponse(BaseModel):
     event_id: str
     event_type: str
 
+class DocumentAllowedTypesResponse(BaseModel):
+    allowed_types: set[str] = Field(
+        default_factory=set,
+        description="List of document types that can be uploaded to this tenant."
+    )
+
 # ---------------------------------------------------------------------------
 # Chat
 # ---------------------------------------------------------------------------

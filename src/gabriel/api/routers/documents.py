@@ -20,10 +20,15 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gabriel.api.dependencies import get_db_session_factory, get_execution_context
+from gabriel.api.schema import (
+    DocumentAllowedTypesResponse
+)
 from gabriel.api.errors import GabrielAPIError
 from gabriel.document.library import (
     DocumentLibraryService,
     UnsupportedDocumentTypeError,
+    SUPPORTED_UPLOAD_EXTENSIONS
+
 )
 from gabriel.document.models import DocumentStatus
 from gabriel.document.normalizer import NormalizationError
@@ -145,6 +150,15 @@ async def list_documents(
             "offset": offset,
         }
 
+@router.get("/allowed", response_model=DocumentAllowedTypesResponse)
+async def list_allowed_document_types(
+    context: ExecutionContext = Depends(get_execution_context),
+    session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
+) -> DocumentAllowedTypesResponse:
+    """List document types that can be uploaded to this tenant."""
+    return DocumentAllowedTypesResponse(
+        allowed_types=SUPPORTED_UPLOAD_EXTENSIONS
+    )
 
 @router.get("/{grn:path}/content")
 async def get_document_content(
