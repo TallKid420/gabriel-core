@@ -22,8 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gabriel.api.dependencies import get_db_session_factory, get_execution_context
 from gabriel.api.errors import GabrielAPIError
+from gabriel.api.tenancy import require_same_org
 from gabriel.knowledge.retrieval import KnowledgeRetriever
-from gabriel.knowledge.source_models import KnowledgeSourceStatus
+from gabriel.knowledge.source_models import KnowledgeSourceStatus, KnowledgeSourceType
 from gabriel.knowledge.source_service import KnowledgeSourceService
 from gabriel.resource.exceptions import ResourceNotFoundError
 from gabriel.resource.grn import GRN
@@ -35,6 +36,7 @@ router = APIRouter(prefix="/knowledge", tags=["Knowledge"])
 class KnowledgeSourceCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=500)
     description: str = ""
+    source_type: str = "vector_collection"
     metadata: dict | None = None
     labels: dict[str, str] | None = None
 
@@ -57,16 +59,15 @@ class KnowledgeSearchRequest(BaseModel):
     limit: int = Field(default=5, ge=1, le=50)
 
 
-def _require_same_org(context: ExecutionContext, grn_str: str) -> None:
-    """Reject GRNs that address a different tenant."""
+def _parse_source_type(value: str | None) -> KnowledgeSourceType | None:
+    if value is None:
+        return None
     try:
-        grn = GRN.parse(grn_str)
-    except Exception as exc:
-        raise GabrielAPIError(f"Invalid GRN '{grn_str}'", status_code=422) from exc
-    if grn.org_id != context.organization:
+        return KnowledgeSourceType(value)
+    except ValueError as exc:
         raise GabrielAPIError(
-            "Cross-organization access is forbidden", status_code=403
-        )
+            f"Unknown knowledge source type '{value}'", status_code=422
+        ) from exc
 
 
 def _parse_status(value: str | None) -> KnowledgeSourceStatus | None:
@@ -92,7 +93,7 @@ async def search_knowledge(
 ):
     """Similarity search over document chunks (keyword fallback)."""
     for grn in (body.knowledge_source_grns or []) + (body.document_grns or []):
-        _require_same_org(context, grn)
+        require_same_org(context, grn)
     retriever = getattr(request.app.state, "knowledge_retriever", None)
     if retriever is None:
         retriever = KnowledgeRetriever(session_factory)
@@ -125,6 +126,7 @@ async def create_source(
             body.name,
             created_by=str(context.principal.id),
             description=body.description,
+            source_type=_parse_source_type(body.source_type),
             metadata=body.metadata,
             labels=body.labels,
             correlation_id=str(context.correlation_id),
@@ -135,15 +137,21 @@ async def create_source(
 @router.get("/sources")
 async def list_sources(
     status: str | None = Query(default=None),
+    source_type: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
     parsed_status = _parse_status(status)
+    parsed_type = _parse_source_type(source_type)
     async with session_factory() as session:
         items, total = await KnowledgeSourceService(session).list_sources(
-            context.organization, status=parsed_status, limit=limit, offset=offset
+            context.organization,
+            status=parsed_status,
+            source_type=parsed_type,
+            limit=limit,
+            offset=offset,
         )
         return {
             "items": [item.public_view() for item in items],
@@ -161,7 +169,7 @@ async def list_source_documents(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             items, total = await KnowledgeSourceService(session).list_documents(
@@ -184,8 +192,8 @@ async def detach_document(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
-    _require_same_org(context, body.document_grn)
+    require_same_org(context, grn)
+    require_same_org(context, body.document_grn)
     async with session_factory() as session:
         try:
             document = await KnowledgeSourceService(session).detach_document(
@@ -207,8 +215,8 @@ async def attach_document(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
-    _require_same_org(context, body.document_grn)
+    require_same_org(context, grn)
+    require_same_org(context, body.document_grn)
     async with session_factory() as session:
         try:
             document = await KnowledgeSourceService(session).attach_document(
@@ -229,7 +237,7 @@ async def get_source(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             source = await KnowledgeSourceService(session).get_source(
@@ -247,7 +255,7 @@ async def update_source(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     if body.status is not None:
         _parse_status(body.status)
     async with session_factory() as session:
@@ -273,7 +281,7 @@ async def delete_source(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             await KnowledgeSourceService(session).delete_source(

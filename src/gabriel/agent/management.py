@@ -94,7 +94,9 @@ def agent_public_view(agent: Agent) -> dict[str, Any]:
             "max_tokens": runtime_config.max_tokens,
         },
         "allowed_tools": spec.tools,
+        "disabled_tools": spec.disabled_tools,
         "knowledge_sources": spec.knowledge_sources,
+        "document_collections": spec.document_collections,
         "status": _STATE_TO_STATUS.get(agent.state, AgentStatus.INACTIVE).value,
         "enabled": agent.enabled,
         "state": agent.state.value,
@@ -150,7 +152,9 @@ class AgentManagementService:
         system_prompt: str = "",
         model_config: ModelConfig | dict[str, Any] | None = None,
         allowed_tools: list[str] | None = None,
+        disabled_tools: list[str] | None = None,
         knowledge_sources: list[str] | None = None,
+        document_collections: list[str] | None = None,
         status: AgentStatus | str = AgentStatus.ACTIVE,
         runtime: str = "default",
         metadata: dict[str, Any] | None = None,
@@ -174,7 +178,9 @@ class AgentManagementService:
             provider=config.provider,
             system_prompt=system_prompt,
             tools=allowed_tools or [],
+            disabled_tools=disabled_tools or [],
             knowledge_sources=knowledge_sources or [],
+            document_collections=document_collections or [],
             runtime_config=RuntimeConfiguration(
                 runtime=runtime,
                 temperature=config.temperature,
@@ -239,7 +245,9 @@ class AgentManagementService:
         system_prompt: str | None = None,
         model_config: ModelConfig | dict[str, Any] | None = None,
         allowed_tools: list[str] | None = None,
+        disabled_tools: list[str] | None = None,
         knowledge_sources: list[str] | None = None,
+        document_collections: list[str] | None = None,
         status: AgentStatus | str | None = None,
         metadata: dict[str, Any] | None = None,
         correlation_id: str | None = None,
@@ -257,8 +265,12 @@ class AgentManagementService:
             spec_updates["system_prompt"] = system_prompt
         if allowed_tools is not None:
             spec_updates["tools"] = allowed_tools
+        if disabled_tools is not None:
+            spec_updates["disabled_tools"] = disabled_tools
         if knowledge_sources is not None:
             spec_updates["knowledge_sources"] = knowledge_sources
+        if document_collections is not None:
+            spec_updates["document_collections"] = document_collections
         if model_config is not None:
             config = (
                 model_config

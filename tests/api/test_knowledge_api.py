@@ -173,3 +173,30 @@ def test_cross_org_source_access_forbidden(client, make_auth_headers):
         f"/api/v1/knowledge/sources/{source['grn']}", headers=intruder
     )
     assert response.status_code == 403
+
+
+def test_source_type_create_and_filter(client, make_auth_headers):
+    org = _unique_org()
+    headers = make_auth_headers(org=org, identifier="alice")
+
+    _create_source(client, headers, name="Vectors")  # default vector_collection
+    docs = _create_source(
+        client, headers, name="Contracts", source_type="document_collection"
+    )
+    assert docs["source_type"] == "document_collection"
+
+    filtered = client.get(
+        "/api/v1/knowledge/sources?source_type=document_collection",
+        headers=headers,
+    )
+    assert filtered.status_code == 200
+    body = filtered.json()
+    assert body["total"] == 1
+    assert body["items"][0]["name"] == "Contracts"
+
+    invalid = client.post(
+        "/api/v1/knowledge/sources",
+        json={"name": "Bad", "source_type": "graph_db"},
+        headers=headers,
+    )
+    assert invalid.status_code == 422

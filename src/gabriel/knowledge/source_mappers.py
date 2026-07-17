@@ -1,5 +1,9 @@
 """Mappers between Domain (KnowledgeSource) and Persistence (KnowledgeSourceORM)."""
-from gabriel.knowledge.source_models import KnowledgeSource, KnowledgeSourceStatus
+from gabriel.knowledge.source_models import (
+    KnowledgeSource,
+    KnowledgeSourceStatus,
+    KnowledgeSourceType,
+)
 from gabriel.knowledge.source_orm import KnowledgeSourceORM
 from gabriel.resource.grn import GRN
 
@@ -21,6 +25,7 @@ def orm_to_domain(orm: KnowledgeSourceORM) -> KnowledgeSource:
         name=orm.name,
         description=orm.description or "",
         status=KnowledgeSourceStatus(orm.status),
+        source_type=KnowledgeSourceType(orm.source_type or "vector_collection"),
         document_count=orm.document_count or 0,
     )
 
@@ -42,5 +47,6 @@ def domain_to_orm(domain: KnowledgeSource) -> KnowledgeSourceORM:
         name=domain.name,
         description=domain.description,
         status=domain.status.value,
+        source_type=domain.source_type.value,
         document_count=domain.document_count,
     )

@@ -34,6 +34,7 @@ from gabriel.api.dependencies import (
     get_gateway_service,
 )
 from gabriel.api.errors import GabrielAPIError
+from gabriel.api.tenancy import require_same_org
 from gabriel.api.schema import AgentExecuteRequest, AgentStateResponse
 from gabriel.events.repository import EventRepository
 from gabriel.resource.exceptions import ResourceNotFoundError
@@ -51,7 +52,9 @@ class AgentCreateRequest(BaseModel):
     system_prompt: str = ""
     model_settings: dict[str, Any] | None = Field(default=None, alias="model_config")
     allowed_tools: list[str] | None = None
+    disabled_tools: list[str] | None = None
     knowledge_sources: list[str] | None = None
+    document_collections: list[str] | None = None
     status: str = AgentStatus.ACTIVE.value
     runtime: str = "default"
     metadata: dict[str, Any] | None = None
@@ -66,21 +69,11 @@ class AgentUpdateRequest(BaseModel):
     system_prompt: str | None = None
     model_settings: dict[str, Any] | None = Field(default=None, alias="model_config")
     allowed_tools: list[str] | None = None
+    disabled_tools: list[str] | None = None
     knowledge_sources: list[str] | None = None
+    document_collections: list[str] | None = None
     status: str | None = None
     metadata: dict[str, Any] | None = None
-
-
-def _require_same_org(context: ExecutionContext, grn_str: str) -> None:
-    """Reject GRNs that address a different tenant."""
-    try:
-        grn = GRN.parse(grn_str)
-    except Exception as exc:
-        raise GabrielAPIError(f"Invalid GRN '{grn_str}'", status_code=422) from exc
-    if grn.org_id != context.organization:
-        raise GabrielAPIError(
-            "Cross-organization access is forbidden", status_code=403
-        )
 
 
 def _parse_status(value: str | None) -> AgentStatus | None:
@@ -131,7 +124,9 @@ async def create_agent(
             system_prompt=body.system_prompt,
             model_config=body.model_settings,
             allowed_tools=body.allowed_tools,
+            disabled_tools=body.disabled_tools,
             knowledge_sources=body.knowledge_sources,
+            document_collections=body.document_collections,
             status=status,
             runtime=body.runtime,
             metadata=body.metadata,
@@ -199,7 +194,7 @@ async def get_agent(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             agent = await _service(session).get_agent(grn, org_id=context.organization)
@@ -215,7 +210,7 @@ async def update_agent(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     status = _parse_status(body.status)
     async with session_factory() as session:
         try:
@@ -228,7 +223,9 @@ async def update_agent(
                 system_prompt=body.system_prompt,
                 model_config=body.model_settings,
                 allowed_tools=body.allowed_tools,
+                disabled_tools=body.disabled_tools,
                 knowledge_sources=body.knowledge_sources,
+                document_collections=body.document_collections,
                 status=status,
                 metadata=body.metadata,
                 correlation_id=str(context.correlation_id),
@@ -244,7 +241,7 @@ async def delete_agent(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             await _service(session).delete_agent(

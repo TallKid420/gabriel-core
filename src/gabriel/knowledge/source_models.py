@@ -23,6 +23,29 @@ class KnowledgeSourceStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class KnowledgeSourceType(str, Enum):
+    """What kind of knowledge backs this source.
+
+    Agents reference knowledge sources by GRN only — the type is an
+    implementation detail resolved by the knowledge module, never by the
+    agent or the chat runtime (no coupling to any vector DB).
+
+    VECTOR_COLLECTION   — chunked + embedded documents, similarity-searched
+                          at chat time (the V1 RAG default).
+    DOCUMENT_COLLECTION — a plain grouping of uploaded documents that agents
+                          can reference as a document library (retrieval uses
+                          the keyword/chunk fallback; no embedding required).
+    EXTERNAL            — future: an external knowledge base reached through
+                          a connector (Confluence, Notion, SharePoint, …).
+                          Connection details live in ``metadata``/connector
+                          resources, not on this model.
+    """
+
+    VECTOR_COLLECTION = "vector_collection"
+    DOCUMENT_COLLECTION = "document_collection"
+    EXTERNAL = "external"
+
+
 class KnowledgeSource(Resource):
     """A collection of documents used as retrieval grounding for agents."""
 
@@ -37,6 +60,9 @@ class KnowledgeSource(Resource):
     status: KnowledgeSourceStatus = KnowledgeSourceStatus.ACTIVE
     """Domain status: active (retrievable) or archived (excluded from RAG)."""
 
+    source_type: KnowledgeSourceType = KnowledgeSourceType.VECTOR_COLLECTION
+    """Kind of knowledge backing this source (see :class:`KnowledgeSourceType`)."""
+
     document_count: int = 0
     """Denormalized count of attached documents (maintained by the service)."""
 
@@ -48,6 +74,7 @@ class KnowledgeSource(Resource):
             "name": self.name,
             "description": self.description,
             "status": self.status.value,
+            "source_type": self.source_type.value,
             "document_count": self.document_count,
             "state": self.state.value,
             "version": self.version,

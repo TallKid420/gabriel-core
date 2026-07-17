@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gabriel.agent.mappers import orm_to_domain as agent_orm_to_domain
 from gabriel.agent.models import Agent
+from gabriel.agent.specification import AgentSpecification
 from gabriel.agent.repository import AgentRepository
 from gabriel.conversation.message_models import Message, MessageRole
 from gabriel.conversation.message_service import ConversationClosedError, MessageService
@@ -48,6 +49,8 @@ from gabriel.gateway.providers.registry import ProviderRegistry
 from gabriel.gateway.sessions import SessionManager
 from gabriel.gateway.tools import RuntimeToolRegistry, execute_tool_call
 from gabriel.resource.exceptions import ResourceNotFoundError
+from gabriel.tool.mappers import orm_to_domain as tool_orm_to_domain
+from gabriel.tool.repository import ToolRepository
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +74,17 @@ class AgentRuntimeConfig:
     allowed_tools: list[str] | None
     context_window: int = DEFAULT_CONTEXT_WINDOW
     knowledge_sources: tuple[str, ...] = ()
+    document_collections: tuple[str, ...] = ()
+
+    def grounding_sources(self) -> list[str]:
+        """Deduplicated GRNs used for retrieval grounding this turn."""
+        seen: set[str] = set()
+        combined: list[str] = []
+        for grn in (*self.knowledge_sources, *self.document_collections):
+            if grn not in seen:
+                seen.add(grn)
+                combined.append(grn)
+        return combined
 
 
 def sse_event(event: str, data: dict[str, Any]) -> str:
@@ -148,6 +162,7 @@ class ChatRuntimeService:
         max_tokens: int | None = None
         allowed_tools: list[str] | None = None
         knowledge_sources: tuple[str, ...] = ()
+        document_collections: tuple[str, ...] = ()
 
         if agent_grn:
             agent = await self._load_agent(session, agent_grn, org_id)
@@ -158,10 +173,13 @@ class ChatRuntimeService:
             model = model_override or spec.model or ""
             temperature = runtime_config.temperature
             max_tokens = runtime_config.max_tokens
-            # An agent that declares tools is restricted to them; an agent
+            # Tool exposure comes entirely from the agent configuration:
+            # an agent that declares tools is restricted to them; an agent
             # with no declared tools may use every registered runtime tool.
-            allowed_tools = spec.tool_names() or None
+            # ``disabled_tools`` and org-disabled Tool resources always win.
+            allowed_tools = await self._resolve_allowed_tools(session, spec, org_id)
             knowledge_sources = tuple(spec.knowledge_sources or ())
+            document_collections = tuple(spec.document_collections or ())
 
         if not model:
             raise ChatRuntimeError(
@@ -177,7 +195,49 @@ class ChatRuntimeService:
             max_tokens=max_tokens,
             allowed_tools=allowed_tools,
             knowledge_sources=knowledge_sources,
+            document_collections=document_collections,
         )
+
+    async def _resolve_allowed_tools(
+        self, session: AsyncSession, spec: AgentSpecification, org_id: str
+    ) -> list[str] | None:
+        """Compute the runtime tool allow-list for one agent configuration.
+
+        Precedence (deny wins, mirroring PEEL semantics — ADR-008):
+        1. start from the agent's declared tools (or every registered
+           runtime tool when the agent declares none);
+        2. drop anything in the agent's ``disabled_tools``;
+        3. drop any Tool resource the org has disabled (``Tool.enabled``).
+
+        Returns ``None`` (= unrestricted) only when the agent declares no
+        tools and nothing is disabled, preserving prior behavior.
+        """
+        declared = spec.tool_names()
+        disabled = set(spec.disabled_tool_names())
+        disabled |= await self._org_disabled_tool_names(session, org_id)
+        if not declared and not disabled:
+            return None
+        base = declared or self.tools.list_tools()
+        return [name for name in base if name not in disabled]
+
+    async def _org_disabled_tool_names(
+        self, session: AsyncSession, org_id: str
+    ) -> set[str]:
+        """Names of Tool resources the org has switched off.
+
+        Degrades to an empty set on lookup failure — tool governance must
+        never break a chat turn (same resilience contract as retrieval).
+        """
+        try:
+            orms = await ToolRepository(session).list_for_org(org_id)
+        except Exception:  # noqa: BLE001 - resilience: never break a turn
+            logger.exception(
+                "Tool enablement lookup failed for org %s; "
+                "continuing with agent-declared tools only",
+                org_id,
+            )
+            return set()
+        return {tool_orm_to_domain(orm).name for orm in orms if not orm.enabled}
 
     # ------------------------------------------------------------------
     # Persistence helpers (durable writes go through Phase-2 services)
@@ -301,13 +361,15 @@ class ChatRuntimeService:
             return
         yield sse_event("message", {"grn": str(user_message.grn), "role": "user"})
 
-        # RAG: ground the turn in the agent's knowledge sources (Phase 4).
+        # RAG: ground the turn in the agent's knowledge sources and document
+        # collections (both are KnowledgeSource resources referenced by GRN).
         # Retrieval failures degrade to an ungrounded turn — never an error.
-        if self.retriever is not None and config.knowledge_sources:
+        grounding_sources = config.grounding_sources()
+        if self.retriever is not None and grounding_sources:
             retrieved = await self.retriever.retrieve(
                 org_id=org_id,
                 query=content,
-                knowledge_source_grns=list(config.knowledge_sources),
+                knowledge_source_grns=grounding_sources,
             )
             if retrieved:
                 context_blocks = list(context_blocks or []) + retrieved

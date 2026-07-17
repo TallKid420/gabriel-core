@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import JSON, String
+from sqlalchemy import JSON, Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from gabriel.database import Base, GabrielResourceMixin
@@ -44,3 +44,17 @@ class ToolORM(Base, GabrielResourceMixin):
     # Dot-path key resolved by FunctionRegistry / ToolExecutor at runtime.
     # e.g. "math.calculate", "integration.gmail.send_email"
     runtime_binding: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+
+    # Declared execution location (enum string value: local/enterprise/cloud/edge).
+    # V1 is declaration-only — no runtime routing consumes this yet.
+    execution_runtime: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="local"
+    )
+
+    # Org-level kill switch: a disabled tool is never exposed to the chat runtime.
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Free-form tool-specific configuration (never secrets).
+    configuration: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )

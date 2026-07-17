@@ -36,6 +36,7 @@ from gabriel.api.routers import (
     users,
     chat,
     notifications,
+    tools,
 )
 
 def register_routers(app: FastAPI) -> None:
@@ -60,6 +61,7 @@ def register_routers(app: FastAPI) -> None:
     v1.include_router(users.router)
     v1.include_router(auth.router)
     v1.include_router(chat.router)
+    v1.include_router(tools.router)
     v1.include_router(notifications.router)
     app.include_router(v1)
 
