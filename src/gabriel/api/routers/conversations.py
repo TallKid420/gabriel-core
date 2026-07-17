@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gabriel.api.dependencies import get_db_session_factory, get_execution_context
 from gabriel.api.errors import GabrielAPIError
+from gabriel.api.tenancy import require_same_org
 from gabriel.conversation.message_models import MessageRole
 from gabriel.conversation.message_service import ConversationClosedError, MessageService
 from gabriel.conversation.models import ConversationStatus
@@ -60,18 +61,6 @@ class MessageCreateRequest(BaseModel):
     total_tokens: int | None = Field(default=None, ge=0)
     model: str | None = None
     metadata: dict[str, Any] | None = None
-
-
-def _require_same_org(context: ExecutionContext, grn_str: str) -> None:
-    """Reject GRNs that address a different tenant."""
-    try:
-        grn = GRN.parse(grn_str)
-    except Exception as exc:
-        raise GabrielAPIError(f"Invalid GRN '{grn_str}'", status_code=422) from exc
-    if grn.org_id != context.organization:
-        raise GabrielAPIError(
-            "Cross-organization access is forbidden", status_code=403
-        )
 
 
 def _parse_status(value: str | None) -> ConversationStatus | None:
@@ -137,7 +126,7 @@ async def list_messages(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         service = MessageService(session)
         try:
@@ -163,7 +152,7 @@ async def create_message(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     try:
         role = MessageRole(body.role)
     except ValueError as exc:
@@ -200,7 +189,7 @@ async def get_conversation(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             conversation = await ConversationService(session).get_conversation(
@@ -218,7 +207,7 @@ async def update_conversation(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     parsed_status = _parse_status(body.status)
     async with session_factory() as session:
         try:
@@ -244,7 +233,7 @@ async def delete_conversation(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             conversation = await ConversationService(session).delete_conversation(

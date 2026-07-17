@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gabriel.api.dependencies import get_db_session_factory, get_execution_context
 from gabriel.api.errors import GabrielAPIError
+from gabriel.api.tenancy import require_same_org
 from gabriel.identity.exceptions import AuthenticationFailedError
 from gabriel.identity.roles import OrgRole
 from gabriel.resource.exceptions import DuplicateResourceError, ResourceNotFoundError
@@ -46,18 +47,6 @@ class UserUpdateRequest(BaseModel):
 class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8, max_length=256)
-
-
-def _require_same_org(context: ExecutionContext, grn_str: str) -> None:
-    """Reject GRNs that address a different tenant."""
-    try:
-        grn = GRN.parse(grn_str)
-    except Exception as exc:
-        raise GabrielAPIError(f"Invalid GRN '{grn_str}'", status_code=422) from exc
-    if grn.org_id != context.organization:
-        raise GabrielAPIError(
-            "Cross-organization access is forbidden", status_code=403
-        )
 
 
 @router.get("")
@@ -146,7 +135,7 @@ async def get_user(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             user = await UserService(session).get_user(grn)
@@ -162,7 +151,7 @@ async def update_user(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             user = await UserService(session).update_user(
@@ -183,7 +172,7 @@ async def deactivate_user(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             user = await UserService(session).deactivate_user(

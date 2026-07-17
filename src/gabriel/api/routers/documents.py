@@ -24,6 +24,7 @@ from gabriel.api.schema import (
     DocumentAllowedTypesResponse
 )
 from gabriel.api.errors import GabrielAPIError
+from gabriel.api.tenancy import require_same_org
 from gabriel.document.library import (
     DocumentLibraryService,
     UnsupportedDocumentTypeError,
@@ -39,18 +40,6 @@ from gabriel.resource.grn import GRN
 from gabriel.runtime.context import ExecutionContext
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
-
-
-def _require_same_org(context: ExecutionContext, grn_str: str) -> None:
-    """Reject GRNs that address a different tenant."""
-    try:
-        grn = GRN.parse(grn_str)
-    except Exception as exc:
-        raise GabrielAPIError(f"Invalid GRN '{grn_str}'", status_code=422) from exc
-    if grn.org_id != context.organization:
-        raise GabrielAPIError(
-            "Cross-organization access is forbidden", status_code=403
-        )
 
 
 def _parse_status(value: str | None) -> DocumentStatus | None:
@@ -166,7 +155,7 @@ async def get_document_content(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         library = DocumentLibraryService(session)
         try:
@@ -190,7 +179,7 @@ async def list_document_chunks(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             await DocumentLibraryService(session).get_document(
@@ -232,7 +221,7 @@ async def process_document(
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
     """(Re-)chunk and embed a document's text."""
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         processor = DocumentProcessingService(
             session, embedder=_resolve_embedder(request)
@@ -262,7 +251,7 @@ async def get_document(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             document = await DocumentLibraryService(session).get_document(
@@ -280,7 +269,7 @@ async def delete_document(
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
     """Soft-delete a document; its derived chunks are purged."""
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         try:
             await DocumentLibraryService(session).delete_document(

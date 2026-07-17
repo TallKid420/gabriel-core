@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gabriel.api.dependencies import get_db_session_factory, get_execution_context
 from gabriel.api.errors import GabrielAPIError
+from gabriel.api.tenancy import require_same_org
 from gabriel.notification.service import NotificationService
 from gabriel.resource.exceptions import ResourceNotFoundError
 from gabriel.resource.grn import GRN
@@ -24,18 +25,6 @@ from gabriel.runtime.context import ExecutionContext
 from gabriel.user.service import UserService
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
-
-
-def _require_same_org(context: ExecutionContext, grn_str: str) -> None:
-    """Reject GRNs that address a different tenant."""
-    try:
-        grn = GRN.parse(grn_str)
-    except Exception as exc:
-        raise GabrielAPIError(f"Invalid GRN '{grn_str}'", status_code=422) from exc
-    if grn.org_id != context.organization:
-        raise GabrielAPIError(
-            "Cross-organization access is forbidden", status_code=403
-        )
 
 
 async def _resolve_recipient(session: AsyncSession, context: ExecutionContext) -> str:
@@ -93,7 +82,7 @@ async def _mark_one_read(
     context: ExecutionContext,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> dict:
-    _require_same_org(context, grn)
+    require_same_org(context, grn)
     async with session_factory() as session:
         recipient = await _resolve_recipient(session, context)
         try:
