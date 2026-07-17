@@ -1,4 +1,6 @@
 """DocumentLibraryService & DocumentProcessingService (Phase 4)."""
+from pathlib import Path
+
 import pytest
 
 from gabriel.document.library import (
@@ -23,6 +25,11 @@ class FakeEmbedder:
 
     async def embed(self, texts):
         return [[float(len(t)), 1.0] for t in texts]
+
+
+class StubNormalizer:
+    def normalize(self, path: str) -> str:
+        return f"normalized:{Path(path).suffix}"
 
 
 @pytest.fixture
@@ -164,3 +171,79 @@ async def test_soft_delete_purges_chunks(db_session, library):
         str(document.grn), ORG
     )
     assert total == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filename", "content"),
+    [
+        ("sample.pdf", b"%PDF-1.4\n%stub"),
+        ("sample.docx", b"PK\x03\x04\x14\x00\x06\x00"),
+    ],
+)
+async def test_upload_parser_formats_retries_tempfile_cleanup(
+    db_session, content_store, monkeypatch, filename, content
+):
+    library = DocumentLibraryService(
+        db_session,
+        content_store=content_store,
+        normalizer=StubNormalizer(),
+    )
+
+    original_unlink = Path.unlink
+    calls = {"count": 0}
+
+    def flaky_unlink(self: Path, *, missing_ok: bool = False):
+        calls["count"] += 1
+        if calls["count"] <= 2:
+            raise PermissionError("WinError 32 simulated lock")
+        return original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", flaky_unlink)
+
+    first = await library.upload_document(
+        ORG,
+        filename=filename,
+        content=content,
+        created_by=USER,
+        commit=False,
+    )
+    second = await library.upload_document(
+        ORG,
+        filename=f"again-{filename}",
+        content=content,
+        created_by=USER,
+        commit=False,
+    )
+
+    assert first.status == DocumentStatus.UPLOADED
+    assert second.status == DocumentStatus.UPLOADED
+    assert calls["count"] >= 4
+
+
+@pytest.mark.asyncio
+async def test_upload_parser_formats_does_not_fail_when_cleanup_exhausts_retries(
+    db_session, content_store, monkeypatch, caplog
+):
+    library = DocumentLibraryService(
+        db_session,
+        content_store=content_store,
+        normalizer=StubNormalizer(),
+    )
+
+    def always_locked_unlink(self: Path, *, missing_ok: bool = False):
+        raise PermissionError("WinError 32 simulated persistent lock")
+
+    monkeypatch.setattr(Path, "unlink", always_locked_unlink)
+
+    with caplog.at_level("WARNING"):
+        document = await library.upload_document(
+            ORG,
+            filename="locked.pdf",
+            content=b"%PDF-1.4\n%stub",
+            created_by=USER,
+            commit=False,
+        )
+
+    assert document.status == DocumentStatus.UPLOADED
+    assert "Failed to delete temp file" in caplog.text

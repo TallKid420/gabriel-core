@@ -1,7 +1,19 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import APIRouter, FastAPI
+from dotenv import load_dotenv
+
+
+def _load_repo_dotenv() -> None:
+    repo_env = Path(__file__).resolve().parents[3] / ".env"
+    if repo_env.exists():
+        load_dotenv(repo_env, override=False)
+
+
+_load_repo_dotenv()
 
 from gabriel.api.dependencies import initialize_gateway_state
 from gabriel.api.errors import register_exception_handlers

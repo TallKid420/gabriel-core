@@ -9,6 +9,7 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "pydantic",
+    "python-dotenv",
     "httpx",
     "pytest",
     "pytest-asyncio",

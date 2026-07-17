@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi.testclient import TestClient
 
 from gabriel.api.app import create_app
@@ -60,4 +62,14 @@ def test_resource_created_survives_app_restart(auth_headers):
 		body = get_response.json()
 		assert body["grn"] == grn
 		assert body["attributes"] == {"name": "survive-restart"}
+
+
+def test_create_app_uses_env_loaded_before_startup(monkeypatch):
+	monkeypatch.setenv("GABRIEL_OLLAMA_BASE_URL", "http://dotenv-test:11434")
+
+	app = create_app()
+	with TestClient(app):
+		provider = app.state.llm_provider_registry.get("ollama")
+
+	assert provider.base_url == os.environ["GABRIEL_OLLAMA_BASE_URL"]
 

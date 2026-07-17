@@ -17,7 +17,9 @@ processing remain independently testable. The pre-existing event-sourced
 from __future__ import annotations
 
 import hashlib
+import logging
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -40,6 +42,9 @@ from gabriel.resource.models import ResourceState
 from gabriel.resource.registry import registry
 
 SUPPORTED_UPLOAD_EXTENSIONS = {".pdf", ".txt", ".md", ".markdown", ".docx"}
+_TEMPFILE_UNLINK_RETRIES = 5
+_TEMPFILE_UNLINK_BACKOFF_SECONDS = 0.05
+logger = logging.getLogger(__name__)
 
 
 def utcnow() -> datetime:
@@ -306,4 +311,21 @@ class DocumentLibraryService:
         try:
             return self.normalizer.normalize(tmp.name)
         finally:
-            Path(tmp.name).unlink(missing_ok=True)
+            self._cleanup_temp_file(Path(tmp.name))
+
+    def _cleanup_temp_file(self, path: Path) -> None:
+        """Best-effort cleanup for parser-held temp files (Windows-safe)."""
+        for attempt in range(1, _TEMPFILE_UNLINK_RETRIES + 1):
+            try:
+                path.unlink(missing_ok=True)
+                return
+            except PermissionError as exc:
+                if attempt == _TEMPFILE_UNLINK_RETRIES:
+                    logger.warning(
+                        "Failed to delete temp file after %s attempts: %s (%s)",
+                        _TEMPFILE_UNLINK_RETRIES,
+                        path,
+                        exc,
+                    )
+                    return
+                time.sleep(_TEMPFILE_UNLINK_BACKOFF_SECONDS * attempt)
