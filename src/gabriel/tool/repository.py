@@ -50,6 +50,9 @@ class ToolRepository:
         existing.safety_level = tool_orm.safety_level
         existing.required_capabilities = tool_orm.required_capabilities
         existing.runtime_binding = tool_orm.runtime_binding
+        existing.execution_runtime = tool_orm.execution_runtime
+        existing.enabled = tool_orm.enabled
+        existing.configuration = tool_orm.configuration
 
         await self.session.commit()
         await self.session.refresh(existing)

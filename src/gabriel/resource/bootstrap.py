@@ -192,7 +192,7 @@ def register_core_resource_types(target_registry: ResourceRegistry | None = None
 
         reg.register(
             KnowledgeSource,
-            description="Knowledge source (document collection for RAG)",
+            description="Knowledge source (vector/document/external collection for agent grounding)",
             version="1.0",
             tags=frozenset({"core", "knowledge"}),
             capabilities=frozenset(

@@ -47,6 +47,7 @@ class KnowledgeSourceRepository:
         org_id: str,
         *,
         status: str | None = None,
+        source_type: str | None = None,
         limit: int = 50,
         offset: int = 0,
         include_deleted: bool = False,
@@ -57,6 +58,9 @@ class KnowledgeSourceRepository:
         if status is not None:
             stmt = stmt.filter_by(status=status)
             count_stmt = count_stmt.filter_by(status=status)
+        if source_type is not None:
+            stmt = stmt.filter_by(source_type=source_type)
+            count_stmt = count_stmt.filter_by(source_type=source_type)
         if not include_deleted:
             stmt = stmt.filter(KnowledgeSourceORM.state != ResourceState.DELETED)
             count_stmt = count_stmt.filter(
