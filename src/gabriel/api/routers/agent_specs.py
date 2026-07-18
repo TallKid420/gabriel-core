@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from gabriel.agent.exceptions import AgentValidationError
 from gabriel.api.schema import (
     AgentSpecTemplate,
+    AgentSpecResponse,
 )
 from gabriel.api.services.agent_specs import (
     AgentSpecService,
@@ -90,11 +91,11 @@ async def instantiate_endpoint(
     return service.spec_payload(spec)
 
 
-@router.get("")
+@router.get("", response_model=AgentSpecResponse)
 async def list_specs_endpoint(
     service: AgentSpecService = Depends(get_agent_spec_service),
-) -> dict[str, list[str]]:
-    return {"specs": service.list_saved()}
+) -> AgentSpecResponse:
+    return AgentSpecResponse(specs=service.list_saved())
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

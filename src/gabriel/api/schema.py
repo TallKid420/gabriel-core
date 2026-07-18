@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from gabriel.agent.management import AgentStatus
+
+from pydantic import BaseModel, ConfigDict, Field
 from dataclasses import dataclass
 
 
@@ -61,6 +63,10 @@ class ResourceListResponse(BaseModel):
 class AgentSpecTemplate(BaseModel):
     templates: list[dict[str, Any]] = Field(default_factory=list)
 
+
+class AgentSpecResponse(BaseModel):
+    specs: list[str] = Field(default_factory=list)
+
 # ---------------------------------------------------------------------------
 # Agents
 # ---------------------------------------------------------------------------
@@ -91,12 +97,6 @@ class AgentSummaryResponse(BaseModel):
     enabled: bool
 
 
-class AgentCreateRequest(BaseModel):
-    name: str
-    runtime: str = "mock"
-    config: dict[str, Any] = Field(default_factory=dict)
-
-
 class AgentExecuteRequest(BaseModel):
     input: dict[str, Any] = Field(default_factory=dict)
 
@@ -105,6 +105,50 @@ class AgentStateResponse(BaseModel):
     grn: str
     status: str
     last_event: str
+
+
+class AgentCreateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    system_prompt: str = ""
+    model_settings: dict[str, Any] | None = Field(default=None, alias="model_config")
+    allowed_tools: list[str] | None = None
+    disabled_tools: list[str] | None = None
+    knowledge_sources: list[str] | None = None
+    document_collections: list[str] | None = None
+    status: str = AgentStatus.ACTIVE.value
+    runtime: str = "default"
+    metadata: dict[str, Any] | None = None
+    labels: dict[str, str] | None = None
+
+
+class AgentUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    system_prompt: str | None = None
+    model_settings: dict[str, Any] | None = Field(default=None, alias="model_config")
+    allowed_tools: list[str] | None = None
+    disabled_tools: list[str] | None = None
+    knowledge_sources: list[str] | None = None
+    document_collections: list[str] | None = None
+    status: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class AgentListResponse(BaseModel):
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    total: int = Field(description="Total number of agents available.")
+    limit: int = Field(description="Maximum number of agents to return.")
+    offset: int = Field(description="Number of agents to skip.")
+
+
+class AgentDeleteResponse(BaseModel):
+    deleted: bool
+    grn: str
 
 
 # ---------------------------------------------------------------------------

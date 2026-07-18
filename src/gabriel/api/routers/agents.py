@@ -21,7 +21,6 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gabriel.agent.management import AgentManagementService, AgentStatus, agent_public_view
@@ -33,47 +32,22 @@ from gabriel.api.dependencies import (
     get_execution_context,
     get_gateway_service,
 )
+from gabriel.api.schema import (
+    AgentExecuteRequest, 
+    AgentStateResponse,
+    AgentCreateRequest,
+    AgentUpdateRequest,
+    AgentListResponse,
+    AgentDeleteResponse,
+)
 from gabriel.api.errors import GabrielAPIError
 from gabriel.api.tenancy import require_same_org
-from gabriel.api.schema import AgentExecuteRequest, AgentStateResponse
 from gabriel.events.repository import EventRepository
 from gabriel.resource.exceptions import ResourceNotFoundError
 from gabriel.resource.grn import GRN
 from gabriel.runtime.context import ExecutionContext
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
-
-
-class AgentCreateRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    name: str = Field(min_length=1, max_length=200)
-    description: str = ""
-    system_prompt: str = ""
-    model_settings: dict[str, Any] | None = Field(default=None, alias="model_config")
-    allowed_tools: list[str] | None = None
-    disabled_tools: list[str] | None = None
-    knowledge_sources: list[str] | None = None
-    document_collections: list[str] | None = None
-    status: str = AgentStatus.ACTIVE.value
-    runtime: str = "default"
-    metadata: dict[str, Any] | None = None
-    labels: dict[str, str] | None = None
-
-
-class AgentUpdateRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    name: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = None
-    system_prompt: str | None = None
-    model_settings: dict[str, Any] | None = Field(default=None, alias="model_config")
-    allowed_tools: list[str] | None = None
-    disabled_tools: list[str] | None = None
-    knowledge_sources: list[str] | None = None
-    document_collections: list[str] | None = None
-    status: str | None = None
-    metadata: dict[str, Any] | None = None
 
 
 def _parse_status(value: str | None) -> AgentStatus | None:
@@ -89,23 +63,23 @@ def _service(session: AsyncSession) -> AgentManagementService:
     return AgentManagementService(AgentRepository(session), EventRepository(session))
 
 
-@router.get("")
+@router.get("", response_model=AgentListResponse)
 async def list_agents(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
-):
+) -> AgentListResponse:
     async with session_factory() as session:
         items, total = await _service(session).list_agents(
             context.organization, limit=limit, offset=offset
         )
-        return {
-            "items": [agent_public_view(agent) for agent in items],
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        }
+        return AgentListResponse(
+            items=[agent_public_view(agent) for agent in items],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
 
 
 @router.post("", status_code=201)
@@ -235,12 +209,12 @@ async def update_agent(
         return agent_public_view(agent)
 
 
-@router.delete("/{grn:path}")
+@router.delete("/{grn:path}", response_model=AgentDeleteResponse)
 async def delete_agent(
     grn: str,
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
-):
+) -> AgentDeleteResponse:
     require_same_org(context, grn)
     async with session_factory() as session:
         try:
@@ -252,4 +226,4 @@ async def delete_agent(
             )
         except ResourceNotFoundError as exc:
             raise GabrielAPIError(str(exc), status_code=404) from exc
-        return {"deleted": True, "grn": grn}
+        return AgentDeleteResponse(deleted=True, grn=grn)
