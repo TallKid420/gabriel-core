@@ -16,7 +16,7 @@ from gabriel.resource.grn import GRN
 from gabriel.resource.models import ResourceState
 from gabriel.resource.registry import registry
 from gabriel.tool.mappers import domain_to_orm, orm_to_domain
-from gabriel.tool.models import SafetyLevel, Tool, ToolCategory
+from gabriel.tool.models import ExecutionRuntime, SafetyLevel, Tool, ToolCategory
 from gabriel.tool.repository import ToolRepository
 
 
@@ -61,7 +61,10 @@ class ToolService:
         output_schema: dict[str, Any],
         safety_level: SafetyLevel,
         required_capabilities: list[str],
-        runtime_binding: str,
+        runtime_binding: str = "",
+        execution_runtime: ExecutionRuntime = ExecutionRuntime.LOCAL,
+        enabled: bool = True,
+        configuration: dict[str, Any] | None = None,
         tool_grn: str | None = None,
         metadata: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
@@ -83,6 +86,9 @@ class ToolService:
             safety_level=safety_level,
             required_capabilities=required_capabilities,
             runtime_binding=runtime_binding,
+            execution_runtime=execution_runtime,
+            enabled=enabled,
+            configuration=configuration or {},
             labels=labels or {},
             metadata=metadata or {},
         )
@@ -156,9 +162,21 @@ class ToolService:
         safety_level: SafetyLevel | None = None,
         required_capabilities: list[str] | None = None,
         runtime_binding: str | None = None,
+        execution_runtime: ExecutionRuntime | None = None,
+        enabled: bool | None = None,
+        configuration: dict[str, Any] | None = None,
         correlation_id: str | None = None,
     ) -> Tool:
         existing = orm_to_domain(await self.repo.get_by_grn(grn_str))
+
+        # model_copy(update=...) bypasses pydantic validation, so coerce enum
+        # inputs (raw strings/ints are accepted for convenience) explicitly.
+        if category is not None:
+            category = ToolCategory(category)
+        if safety_level is not None:
+            safety_level = SafetyLevel(safety_level)
+        if execution_runtime is not None:
+            execution_runtime = ExecutionRuntime(execution_runtime)
 
         updated = existing.model_copy(
             update={
@@ -185,6 +203,17 @@ class ToolService:
                     runtime_binding
                     if runtime_binding is not None
                     else existing.runtime_binding
+                ),
+                "execution_runtime": (
+                    execution_runtime
+                    if execution_runtime is not None
+                    else existing.execution_runtime
+                ),
+                "enabled": enabled if enabled is not None else existing.enabled,
+                "configuration": (
+                    configuration
+                    if configuration is not None
+                    else existing.configuration
                 ),
                 "updated_by": updated_by,
                 "updated_at": _utcnow(),

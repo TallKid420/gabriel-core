@@ -23,6 +23,7 @@ import gabriel.events.orm  # noqa: F401
 import gabriel.agent.orm  # noqa: F401
 import gabriel.conversation.orm  # noqa: F401
 import gabriel.conversation.message_orm  # noqa: F401
+import gabriel.tool.orm  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 

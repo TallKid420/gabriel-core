@@ -16,7 +16,7 @@ async def test_tool_persists_with_full_schema(db_session):
         tool_grn="grn:acme:tool/search:1",
         name="search",
         description="Searches indexed docs",
-        category="retrieval",
+        category="search",
         input_schema={"type": "object", "properties": {"query": {"type": "string"}}},
         output_schema={"type": "object", "properties": {"results": {"type": "array"}}},
         safety_level=2,
@@ -26,7 +26,7 @@ async def test_tool_persists_with_full_schema(db_session):
     fetched = await service.get_tool(str(created.grn))
 
     assert fetched.name == "search"
-    assert fetched.category == "retrieval"
+    assert fetched.category == "search"
     assert fetched.input_schema["properties"]["query"]["type"] == "string"
     assert fetched.required_capabilities == ["call_tool"]
 
@@ -41,7 +41,7 @@ async def test_tool_list_get_update_delete_crud(db_session):
         tool_grn="grn:acme:tool/summarize:1",
         name="summarize",
         description="Summarizes text",
-        category="nlp",
+        category="text",
         input_schema={"type": "object"},
         output_schema={"type": "object"},
         safety_level=1,
@@ -56,12 +56,12 @@ async def test_tool_list_get_update_delete_crud(db_session):
         str(created.grn),
         updated_by="principal://acme/user/admin",
         description="Summarizes long text",
-        safety_level=3,
+        safety_level=2,
         required_capabilities=["call_tool", "read_resource"],
     )
 
     assert updated.description == "Summarizes long text"
-    assert updated.safety_level == 3
+    assert updated.safety_level == 2
     assert updated.version == 2
     assert updated.required_capabilities == ["call_tool", "read_resource"]
 

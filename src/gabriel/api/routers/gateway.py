@@ -25,6 +25,7 @@ from gabriel.api.dependencies import (
     get_session_manager,
 )
 from gabriel.api.errors import GabrielAPIError
+from gabriel.api.tenancy import require_same_org
 from gabriel.gateway.providers.base import (
     ProviderConnectionError,
     ProviderError,
@@ -33,7 +34,6 @@ from gabriel.gateway.providers.base import (
 from gabriel.gateway.providers.registry import ProviderRegistry
 from gabriel.gateway.service import ChatRuntimeError, ChatRuntimeService
 from gabriel.gateway.sessions import SessionManager
-from gabriel.resource.grn import GRN
 from gabriel.runtime.context import ExecutionContext
 
 router = APIRouter(prefix="/gateway", tags=["Gateway"])
@@ -46,15 +46,6 @@ class ChatTurnRequest(BaseModel):
     provider: str | None = None
 
 
-def _require_same_org(context: ExecutionContext, grn_str: str) -> None:
-    try:
-        grn = GRN.parse(grn_str)
-    except Exception as exc:
-        raise GabrielAPIError(f"Invalid GRN '{grn_str}'", status_code=422) from exc
-    if grn.org_id != context.organization:
-        raise GabrielAPIError("Cross-organization access is forbidden", status_code=403)
-
-
 @router.post("/chat/stream")
 async def stream_chat(
     body: ChatTurnRequest,
@@ -62,7 +53,7 @@ async def stream_chat(
     runtime: ChatRuntimeService = Depends(get_chat_runtime_service),
 ) -> StreamingResponse:
     """Stream one chat turn as Server-Sent Events."""
-    _require_same_org(context, body.conversation_grn)
+    require_same_org(context, body.conversation_grn)
     return StreamingResponse(
         runtime.stream_turn(
             org_id=context.organization,
@@ -85,7 +76,7 @@ async def chat(
     runtime: ChatRuntimeService = Depends(get_chat_runtime_service),
 ):
     """Run one chat turn and return the buffered result."""
-    _require_same_org(context, body.conversation_grn)
+    require_same_org(context, body.conversation_grn)
     try:
         return await runtime.complete_turn(
             org_id=context.organization,

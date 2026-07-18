@@ -21,4 +21,9 @@ class KnowledgeSourceORM(Base, GabrielResourceMixin):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="active", index=True
     )
+    # Kind of knowledge backing this source (vector_collection /
+    # document_collection / external). Stored as the enum's string value.
+    source_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="vector_collection", index=True
+    )
     document_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

@@ -1,7 +1,7 @@
 """Mappers between Domain (Tool) and Persistence (ToolORM)."""
 
 from gabriel.resource.grn import GRN
-from gabriel.tool.models import SafetyLevel, Tool, ToolCategory
+from gabriel.tool.models import ExecutionRuntime, SafetyLevel, Tool, ToolCategory
 from gabriel.tool.orm import ToolORM
 
 
@@ -29,6 +29,9 @@ def orm_to_domain(orm: ToolORM) -> Tool:
         safety_level=SafetyLevel(orm.safety_level),
         required_capabilities=orm.required_capabilities,
         runtime_binding=orm.runtime_binding,
+        execution_runtime=ExecutionRuntime(orm.execution_runtime or "local"),
+        enabled=orm.enabled if orm.enabled is not None else True,
+        configuration=orm.configuration or {},
     )
 
 
@@ -55,4 +58,7 @@ def domain_to_orm(domain: Tool) -> ToolORM:
         safety_level=domain.safety_level.value,
         required_capabilities=domain.required_capabilities,
         runtime_binding=domain.runtime_binding,
+        execution_runtime=domain.execution_runtime.value,
+        enabled=domain.enabled,
+        configuration=domain.configuration,
     )

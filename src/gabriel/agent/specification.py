@@ -33,7 +33,9 @@ class AgentSpecification(BaseModel):
     system_prompt: str = ""
     capabilities: list[str] = Field(default_factory=list)
     tools: list[str] = Field(default_factory=list)
+    disabled_tools: list[str] = Field(default_factory=list)
     knowledge_sources: list[str] = Field(default_factory=list)
+    document_collections: list[str] = Field(default_factory=list)
     memory_layers: list[str] = Field(default_factory=list)
     triggers: list[Trigger | str] = Field(default_factory=list)
     runtime_config: RuntimeConfiguration | None = None
@@ -53,6 +55,35 @@ class AgentSpecification(BaseModel):
     def tool_names(self) -> list[str]:
         """Return the bare tool slugs, stripping any GRN binding wrapper."""
         return [tool_name(t) for t in self.tools]
+
+    def disabled_tool_names(self) -> list[str]:
+        """Return the bare disabled-tool slugs, stripping any GRN wrapper."""
+        return [tool_name(t) for t in self.disabled_tools]
+
+    def effective_tool_names(self) -> list[str]:
+        """Enabled tool slugs for this agent: declared tools minus disabled.
+
+        ``disabled_tools`` always wins over ``tools`` (explicit-deny-wins,
+        mirroring PEEL semantics — ADR-008). An agent that declares no tools
+        returns an empty list; the chat runtime interprets that as
+        "all registered runtime tools minus disabled".
+        """
+        disabled = set(self.disabled_tool_names())
+        return [name for name in self.tool_names() if name not in disabled]
+
+    def grounding_source_grns(self) -> list[str]:
+        """All knowledge GRNs the agent may ground on (knowledge + documents).
+
+        Knowledge sources and document collections are both KnowledgeSource
+        resources (typed variants); agents reference them purely by GRN.
+        """
+        seen: set[str] = set()
+        combined: list[str] = []
+        for grn in [*self.knowledge_sources, *self.document_collections]:
+            if grn not in seen:
+                seen.add(grn)
+                combined.append(grn)
+        return combined
 
     def resolved_tools(self, org_id: str, version: int = 1) -> list[str]:
         """Resolve (wildcard) tool bindings to concrete GRNs for *org_id*."""

@@ -22,7 +22,11 @@ from gabriel.document.repository import DocumentRepository
 from gabriel.events.event import Event
 from gabriel.events.repository import EventRepository
 from gabriel.knowledge.source_mappers import domain_to_orm, orm_to_domain
-from gabriel.knowledge.source_models import KnowledgeSource, KnowledgeSourceStatus
+from gabriel.knowledge.source_models import (
+    KnowledgeSource,
+    KnowledgeSourceStatus,
+    KnowledgeSourceType,
+)
 from gabriel.knowledge.source_repository import KnowledgeSourceRepository
 from gabriel.knowledge.vector_store import ChunkVectorStore
 from gabriel.resource.bootstrap import register_core_resource_types
@@ -53,12 +57,18 @@ class KnowledgeSourceService:
         *,
         created_by: str,
         description: str = "",
+        source_type: KnowledgeSourceType | str = KnowledgeSourceType.VECTOR_COLLECTION,
         metadata: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
         correlation_id: str | None = None,
         commit: bool = True,
     ) -> KnowledgeSource:
         """Create a knowledge source and append its creation event atomically."""
+        normalized_type = (
+            source_type
+            if isinstance(source_type, KnowledgeSourceType)
+            else KnowledgeSourceType(source_type)
+        )
         grn = GRN.generate(org_id=org_id, resource_type="knowledge_source")
         source: KnowledgeSource = self.factory.create(
             "knowledge_source",
@@ -70,6 +80,7 @@ class KnowledgeSourceService:
             name=name,
             description=description,
             status=KnowledgeSourceStatus.ACTIVE,
+            source_type=normalized_type,
             document_count=0,
             metadata=metadata or {},
             labels=labels or {},
@@ -109,6 +120,7 @@ class KnowledgeSourceService:
         org_id: str,
         *,
         status: KnowledgeSourceStatus | str | None = None,
+        source_type: KnowledgeSourceType | str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[KnowledgeSource], int]:
@@ -116,8 +128,17 @@ class KnowledgeSourceService:
         status_value = (
             status.value if isinstance(status, KnowledgeSourceStatus) else status
         )
+        source_type_value = (
+            source_type.value
+            if isinstance(source_type, KnowledgeSourceType)
+            else source_type
+        )
         orms, total = await self.repo.list_for_org(
-            org_id, status=status_value, limit=limit, offset=offset
+            org_id,
+            status=status_value,
+            source_type=source_type_value,
+            limit=limit,
+            offset=offset,
         )
         return [orm_to_domain(orm) for orm in orms], total
 
