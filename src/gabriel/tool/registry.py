@@ -29,11 +29,12 @@ ADR compliance
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable, Coroutine
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from gabriel.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Callable type alias: any async function that accepts keyword arguments and
 # returns a JSON-serialisable dict (or raises on error).

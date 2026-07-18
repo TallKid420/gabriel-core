@@ -9,9 +9,9 @@ Org-scoped: the search is restricted to the calling principal's organization.
 
 from __future__ import annotations
 
-import logging
+from gabriel.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def semantic_search(

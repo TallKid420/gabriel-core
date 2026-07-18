@@ -15,6 +15,7 @@ from starlette.responses import JSONResponse
 
 from gabriel.api.auth import AuthenticationError, authenticate_token, extract_bearer_token
 from gabriel.events.audit import PeelEvaluationEvent
+from gabriel.logging_config import get_logger
 from gabriel.policy.engine import Effect
 from gabriel.runtime.context import ExecutionContext
 
@@ -24,7 +25,7 @@ _DEFAULT_REQUEST_LOG_PATH = Path(".gabriel") / "requests.log"
 
 
 def _build_request_logger() -> logging.Logger:
-    logger = logging.getLogger("gabriel.api.requests")
+    logger = get_logger("gabriel.api.requests")
     if logger.handlers:
         return logger
 

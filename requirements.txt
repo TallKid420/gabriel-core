@@ -15,3 +15,4 @@ PyMuPDF
 python-docx
 beautifulsoup4
 pgvector
+rich

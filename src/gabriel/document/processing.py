@@ -14,18 +14,18 @@ the vectors in once the embedding backend is reachable.
 """
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gabriel.document.library import DocumentLibraryService
 from gabriel.document.models import Document, DocumentStatus
+from gabriel.logging_config import get_logger
 from gabriel.knowledge.chunking import TextChunker
 from gabriel.knowledge.embeddings import EmbeddingError, EmbeddingProvider
 from gabriel.knowledge.vector_store import ChunkVectorStore
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 EMBED_BATCH_SIZE = 32
 

@@ -21,6 +21,11 @@ from pathlib import Path
 
 from gabriel.agent.store import AgentSpecificationStore
 from gabriel.agent.templates import build_specification, list_templates
+from gabriel.logging_config import configure_logging, get_logger
+
+
+configure_logging()
+logger = get_logger(__name__)
 
 
 def seed_specs(out_dir: str | Path, fmt: str = "json") -> list[Path]:
@@ -31,7 +36,7 @@ def seed_specs(out_dir: str | Path, fmt: str = "json") -> list[Path]:
         spec = build_specification(key)
         path = store.save(spec)
         written.append(path)
-        print(f"  [+] {key:10s} -> {path}")
+        logger.info("  [+] %s -> %s", f"{key:10s}", path)
     return written
 
 
@@ -50,9 +55,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print(f"Seeding {len(list_templates())} agent specification(s) into '{args.out}' ...")
+    logger.info("Seeding %s agent specification(s) into '%s' ...", len(list_templates()), args.out)
     written = seed_specs(args.out, fmt=args.format)
-    print(f"\nDone. {len(written)} specification file(s) written.")
+    logger.info("Done. %s specification file(s) written.", len(written))
 
 
 if __name__ == "__main__":

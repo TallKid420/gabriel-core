@@ -15,6 +15,10 @@ def _load_repo_dotenv() -> None:
 
 _load_repo_dotenv()
 
+from gabriel.logging_config import configure_logging
+
+configure_logging()
+
 from gabriel.api.dependencies import initialize_gateway_state
 from gabriel.api.errors import register_exception_handlers
 from gabriel.api.middleware import register_middleware

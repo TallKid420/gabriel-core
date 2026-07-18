@@ -19,6 +19,7 @@ dependencies = [
     "langgraph",
     "python-multipart",
     "pgvector",
+    "rich",
 ]
 
 [tool.setuptools]

@@ -17,7 +17,6 @@ processing remain independently testable. The pre-existing event-sourced
 from __future__ import annotations
 
 import hashlib
-import logging
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -34,6 +33,7 @@ from gabriel.document.normalizer import DocumentNormalizer
 from gabriel.document.repository import DocumentRepository
 from gabriel.events.event import Event
 from gabriel.events.repository import EventRepository
+from gabriel.logging_config import get_logger
 from gabriel.knowledge.vector_store import ChunkVectorStore
 from gabriel.resource.bootstrap import register_core_resource_types
 from gabriel.resource.factory import ResourceFactory
@@ -44,7 +44,7 @@ from gabriel.resource.registry import registry
 SUPPORTED_UPLOAD_EXTENSIONS = {".pdf", ".txt", ".md", ".markdown", ".docx"}
 _TEMPFILE_UNLINK_RETRIES = 5
 _TEMPFILE_UNLINK_BACKOFF_SECONDS = 0.05
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def utcnow() -> datetime:

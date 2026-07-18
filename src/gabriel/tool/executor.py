@@ -24,7 +24,6 @@ ADR compliance
 
 from __future__ import annotations
 
-import logging
 import time
 from typing import Any
 
@@ -32,6 +31,7 @@ import jsonschema
 
 from gabriel.events.event import Event
 from gabriel.events.repository import EventRepository
+from gabriel.logging_config import get_logger
 from gabriel.policy.exceptions import UnauthorizedError
 from gabriel.policy.peel import PEEL
 from gabriel.runtime.context import ExecutionContext
@@ -45,7 +45,7 @@ from gabriel.tool.exceptions import (
     ToolNotFoundError,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class ToolExecutor:
     """Secure dispatch engine for Gabriel tools.

@@ -19,7 +19,6 @@ through the Phase-2 conversation/message services.
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -48,11 +47,12 @@ from gabriel.gateway.providers.base import (
 from gabriel.gateway.providers.registry import ProviderRegistry
 from gabriel.gateway.sessions import SessionManager
 from gabriel.gateway.tools import RuntimeToolRegistry, execute_tool_call
+from gabriel.logging_config import get_logger
 from gabriel.resource.exceptions import ResourceNotFoundError
 from gabriel.tool.mappers import orm_to_domain as tool_orm_to_domain
 from gabriel.tool.repository import ToolRepository
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 MAX_TOOL_ITERATIONS = 4
 

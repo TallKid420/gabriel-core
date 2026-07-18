@@ -38,6 +38,10 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gabriel.database.session import async_session
+from gabriel.logging_config import configure_logging, get_logger
+configure_logging()
+logger = get_logger(__name__)
+
 from gabriel.resource.exceptions import DuplicateResourceError
 from gabriel.tool.models import SafetyLevel, ToolCategory
 from gabriel.tool.repository import ToolRepository
@@ -749,10 +753,10 @@ async def seed_tools(
                     **tool_def,
                 )
                 created += 1
-                print(f"  [+] {tool_def['name']} ({tool_def['category'].value})")
+                logger.info("  [+] %s (%s)", tool_def["name"], tool_def["category"].value)
             except DuplicateResourceError:
                 skipped += 1
-                print(f"  [~] {tool_def['name']} already exists — skipped")
+                logger.info("  [~] %s already exists - skipped", tool_def["name"])
 
     return {"created": created, "skipped": skipped}
 
@@ -763,12 +767,14 @@ async def seed_tools(
 
 
 async def _async_main(args: argparse.Namespace) -> None:
-    print(f"Seeding tools for org_id='{args.org_id}' created_by='{args.created_by}' ...")
+    logger.info("Seeding tools for org_id='%s' created_by='%s' ...", args.org_id, args.created_by)
     counts = await seed_tools(org_id=args.org_id, created_by=args.created_by)
     total = counts["created"] + counts["skipped"]
-    print(
-        f"\nDone. {counts['created']} tool(s) created, "
-        f"{counts['skipped']} skipped ({total} total in manifest)."
+    logger.info(
+        "Done. %s tool(s) created, %s skipped (%s total in manifest).",
+        counts["created"],
+        counts["skipped"],
+        total,
     )
 
 

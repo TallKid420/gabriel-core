@@ -24,15 +24,15 @@ re-implementation.
 from __future__ import annotations
 
 import json
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
 from gabriel.gateway.providers.base import ToolCallRequest
+from gabriel.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ToolExecutionError(Exception):

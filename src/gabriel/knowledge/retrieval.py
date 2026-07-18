@@ -12,10 +12,10 @@ error yields an empty result — a chat turn must never break because RAG did.
 """
 from __future__ import annotations
 
-import logging
 from typing import Callable
 
 from gabriel.gateway.prompt import ContextBlock
+from gabriel.logging_config import get_logger
 from gabriel.knowledge.embeddings import (
     EmbeddingError,
     EmbeddingProvider,
@@ -23,7 +23,7 @@ from gabriel.knowledge.embeddings import (
 )
 from gabriel.knowledge.vector_store import ChunkSearchResult, ChunkVectorStore
 
-logger = logging.getLogger("gabriel.knowledge.retrieval")
+logger = get_logger("gabriel.knowledge.retrieval")
 
 DEFAULT_RETRIEVAL_LIMIT = 4
 DEFAULT_MAX_CONTEXT_CHARS = 2000

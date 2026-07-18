@@ -8,11 +8,16 @@ from pathlib import Path
 from typing import Any
 
 from gabriel.database.session import async_session
+from gabriel.logging_config import configure_logging, get_logger
 from gabriel.policy.models import Effect, PolicyStatement
 from gabriel.policy.repository import PolicyRepository
 from gabriel.policy.service import PolicyService
 from gabriel.resource.exceptions import ResourceNotFoundError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+
+configure_logging()
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -252,9 +257,11 @@ async def _async_main(args: argparse.Namespace) -> None:
         org_id=args.org_id,
         created_by=args.created_by,
     )
-    print(
-        "Seeded legacy policies "
-        f"(allow={counts['allow']}, ask={counts['ask']}, deny={counts['deny']})"
+    logger.info(
+        "Seeded legacy policies (allow=%s, ask=%s, deny=%s)",
+        counts["allow"],
+        counts["ask"],
+        counts["deny"],
     )
 
 
