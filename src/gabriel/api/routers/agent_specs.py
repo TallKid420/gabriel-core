@@ -23,6 +23,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from gabriel.agent.exceptions import AgentValidationError
+from gabriel.api.schema import (
+    AgentSpecTemplate,
+)
 from gabriel.api.services.agent_specs import (
     AgentSpecService,
     SpecificationNotFoundError,
@@ -71,11 +74,11 @@ def _build_spec(service: AgentSpecService, req: InstantiateRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/templates")
+@router.get("/templates", response_model=AgentSpecTemplate)
 async def list_templates_endpoint(
     service: AgentSpecService = Depends(get_agent_spec_service),
-) -> dict[str, Any]:
-    return {"templates": service.describe_templates()}
+) -> AgentSpecTemplate:
+    return AgentSpecTemplate(templates=service.describe_templates())
 
 
 @router.post("/instantiate")
