@@ -6,12 +6,11 @@ The executor is the single entry-point for all tool invocations.  Callers
 Invocation pipeline
 -------------------
 1. Resolve ``Tool`` resource from GRN via :class:`ToolService`.
-2. Validate input arguments against ``tool.input_schema`` (JSON Schema).
+2. Validate input arguments against ``tool.parameters`` (JSON Schema).
 3. PEEL check — ``tool:invoke`` action gated by :class:`PEEL`.
 4. Resolve callable from :class:`~gabriel.tool.registry.FunctionRegistry`.
 5. Dispatch: ``await fn(**kwargs)``.
-6. Validate output against ``tool.output_schema``.
-7. Emit :class:`ToolInvokedEvent` to the event repository (ADR-003).
+6. Emit :class:`ToolInvokedEvent` to the event repository (ADR-003).
 
 ADR compliance
 --------------
@@ -19,7 +18,7 @@ ADR compliance
 - ADR-019 (PEEL): Every invocation cleared by PEEL before dispatch.
 - ADR-016 (Tool Registry): Tool resource resolved from GRN; callable from
   FunctionRegistry.
-- ADR-024 (Schema Validation): Input AND output validated against JSON Schema.
+- ADR-024 (Schema Validation): Input validated against JSON Schema.
 """
 
 from __future__ import annotations
@@ -92,11 +91,11 @@ class ToolExecutor:
                        so the caller can prompt the user.
 
         Returns:
-            The tool's output dict (validated against ``output_schema``).
+            The tool's output dict.
 
         Raises:
             ToolNotFoundError:         GRN not found or no callable registered.
-            SchemaValidationError:     Input/output schema mismatch.
+            SchemaValidationError:     Input schema mismatch.
             ConfirmationRequiredError: Tool requires human approval.
             UnauthorizedError:         PEEL denied the invocation.
             ToolInvocationError:       Any other execution failure.
@@ -105,7 +104,7 @@ class ToolExecutor:
         tool = await self._resolve_tool(tool_grn)
 
         # 2. Validate inputs
-        self._validate_schema(arguments, tool.input_schema, "input", tool.name)
+        self._validate_schema(arguments, tool.parameters, "input", tool.name)
 
         # 3. PEEL check
         await self.peel.authorize(context, "tool:invoke", tool_grn)
@@ -132,10 +131,7 @@ class ToolExecutor:
             ) from exc
         elapsed_ms = int((time.monotonic() - started_at) * 1000)
 
-        # 7. Validate output
-        self._validate_schema(result, tool.output_schema, "output", tool.name)
-
-        # 8. Emit audit event
+        # 7. Emit audit event
         await self._emit_event(
             context,
             tool,

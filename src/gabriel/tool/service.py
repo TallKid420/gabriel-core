@@ -18,6 +18,7 @@ from gabriel.resource.registry import registry
 from gabriel.tool.mappers import domain_to_orm, orm_to_domain
 from gabriel.tool.models import ExecutionRuntime, SafetyLevel, Tool, ToolCategory
 from gabriel.tool.repository import ToolRepository
+from gabriel.tool.discovery import ToolLibraryIndexer
 
 
 def _utcnow() -> datetime:
@@ -57,10 +58,8 @@ class ToolService:
         name: str,
         description: str,
         category: ToolCategory,
-        input_schema: dict[str, Any],
-        output_schema: dict[str, Any],
+        parameters: dict[str, Any],
         safety_level: SafetyLevel,
-        required_capabilities: list[str],
         runtime_binding: str = "",
         execution_runtime: ExecutionRuntime = ExecutionRuntime.LOCAL,
         enabled: bool = True,
@@ -69,6 +68,7 @@ class ToolService:
         metadata: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
         correlation_id: str | None = None,
+        fn: Any | None = None,
     ) -> Tool:
         grn = GRN.parse(tool_grn) if tool_grn else GRN.generate(org_id, "tool")
         grn_str = str(grn)
@@ -81,16 +81,15 @@ class ToolService:
             name=name,
             description=description,
             category=category,
-            input_schema=input_schema,
-            output_schema=output_schema,
+            parameters=parameters,
             safety_level=safety_level,
-            required_capabilities=required_capabilities,
             runtime_binding=runtime_binding,
             execution_runtime=execution_runtime,
             enabled=enabled,
             configuration=configuration or {},
             labels=labels or {},
             metadata=metadata or {},
+            fn=fn or None,
         )
 
         try:
@@ -135,12 +134,15 @@ class ToolService:
         org_id: str | None = None,
         category: ToolCategory | None = None,
     ) -> list[Tool]:
-        orm_tools = (
-            await self.repo.list_for_org(org_id)
-            if org_id
-            else await self.repo.list_all()
-        )
-        tools = [orm_to_domain(t) for t in orm_tools]
+        if org_id:
+            orm_tools = await self.repo.list_for_org(org_id)
+        else:
+            orm_tools = await self.repo.list_all()
+
+        tools = ToolLibraryIndexer().discover(force=True)
+        for t in orm_tools:
+            tools.append(orm_to_domain(t))
+
         if category is not None:
             tools = [t for t in tools if t.category == category]
         return tools
@@ -157,10 +159,9 @@ class ToolService:
         name: str | None = None,
         description: str | None = None,
         category: ToolCategory | None = None,
-        input_schema: dict[str, Any] | None = None,
-        output_schema: dict[str, Any] | None = None,
+        fn: Any | None = None,
+        parameters: dict[str, Any] | None = None,
         safety_level: SafetyLevel | None = None,
-        required_capabilities: list[str] | None = None,
         runtime_binding: str | None = None,
         execution_runtime: ExecutionRuntime | None = None,
         enabled: bool | None = None,
@@ -185,19 +186,11 @@ class ToolService:
                     description if description is not None else existing.description
                 ),
                 "category": category if category is not None else existing.category,
-                "input_schema": (
-                    input_schema if input_schema is not None else existing.input_schema
-                ),
-                "output_schema": (
-                    output_schema if output_schema is not None else existing.output_schema
+                "parameters": (
+                    parameters if parameters is not None else existing.parameters
                 ),
                 "safety_level": (
                     safety_level if safety_level is not None else existing.safety_level
-                ),
-                "required_capabilities": (
-                    required_capabilities
-                    if required_capabilities is not None
-                    else existing.required_capabilities
                 ),
                 "runtime_binding": (
                     runtime_binding

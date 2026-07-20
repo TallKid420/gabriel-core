@@ -27,19 +27,11 @@ class ToolORM(Base, GabrielResourceMixin):
     # Stored as the enum's string value (e.g. "math", "email")
     category: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    input_schema: Mapped[dict[str, Any]] = mapped_column(
-        JSON, nullable=False, default=dict
-    )
-    output_schema: Mapped[dict[str, Any]] = mapped_column(
-        JSON, nullable=False, default=dict
-    )
+    # Input schema for the function in each python script.
+    parameters: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     # Stored as int (0 = SAFE, 1 = REQUIRES_CONFIRMATION, 2 = RESTRICTED)
     safety_level: Mapped[int] = mapped_column(nullable=False, default=0)
-
-    required_capabilities: Mapped[list[str]] = mapped_column(
-        JSON, nullable=False, default=list
-    )
 
     # Dot-path key resolved by FunctionRegistry / ToolExecutor at runtime.
     # e.g. "math.calculate", "integration.gmail.send_email"

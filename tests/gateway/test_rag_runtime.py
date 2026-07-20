@@ -14,6 +14,9 @@ from gabriel.gateway.providers.registry import ProviderRegistry
 from gabriel.gateway.service import ChatRuntimeService
 from gabriel.gateway.sessions import SessionManager
 from gabriel.gateway.tools import build_default_tool_registry
+from gabriel.policy.engine import PolicyEngine
+from gabriel.policy.peel import PEEL
+from gabriel.tool.registry import FunctionRegistry
 
 from tests.gateway.conftest import FakeProvider
 
@@ -62,6 +65,8 @@ def build_runtime(session_factory, provider, retriever) -> ChatRuntimeService:
         tools=build_default_tool_registry(),
         sessions=SessionManager(),
         retriever=retriever,
+        fn_registry=FunctionRegistry(),
+        peel=PEEL(PolicyEngine()),
     )
 
 

@@ -1,7 +1,9 @@
 """Agent-configuration-driven tool & grounding resolution (V1).
 
-Covers the deny-wins tool allow-list (agent ``disabled_tools`` and
-org-disabled Tool resources) and document-collection grounding in
+Covers the opt-in tool allow-list — a tool is only exposed when it is
+simultaneously present in the discovery catalog, backed by an *enabled*
+``Tool`` resource for the org, and allowed by the agent's declared/disabled
+tools (deny-wins) — plus document-collection grounding in
 ``ChatRuntimeService.resolve_config``.
 """
 from __future__ import annotations
@@ -47,10 +49,8 @@ async def _register_tool(session_factory, name: str, *, enabled: bool) -> None:
             name=name,
             description=f"{name} tool",
             category="utility",
-            input_schema={},
-            output_schema={},
+            parameters={},
             safety_level=0,
-            required_capabilities=[],
             enabled=enabled,
         )
 
@@ -58,16 +58,18 @@ async def _register_tool(session_factory, name: str, *, enabled: bool) -> None:
 @pytest.mark.asyncio
 async def test_disabled_tools_are_subtracted_from_declared_tools(session_factory):
     runtime = build_runtime(session_factory, FakeProvider(script=[{"text": "hi"}]))
+    await _register_tool(session_factory, "get_time", enabled=True)
+    await _register_tool(session_factory, "calculate", enabled=True)
     agent_grn = await create_agent(
         session_factory,
-        allowed_tools=["current_datetime", "web_search"],
-        disabled_tools=["web_search"],
+        allowed_tools=["get_time", "calculate"],
+        disabled_tools=["calculate"],
     )
     conversation = await _get_conversation(session_factory, agent_grn)
 
     config = await _resolve(session_factory, runtime, conversation)
 
-    assert config.allowed_tools == ["current_datetime"]
+    assert config.allowed_tools == ["get_time"]
 
 
 @pytest.mark.asyncio
@@ -75,42 +77,44 @@ async def test_org_disabled_tool_resource_wins_over_agent_declaration(
     session_factory,
 ):
     runtime = build_runtime(session_factory, FakeProvider(script=[{"text": "hi"}]))
-    await _register_tool(session_factory, "current_datetime", enabled=False)
+    await _register_tool(session_factory, "get_time", enabled=False)
+    await _register_tool(session_factory, "calculate", enabled=True)
     agent_grn = await create_agent(
-        session_factory, allowed_tools=["current_datetime", "echo"]
+        session_factory, allowed_tools=["get_time", "calculate"]
     )
     conversation = await _get_conversation(session_factory, agent_grn)
 
     config = await _resolve(session_factory, runtime, conversation)
 
-    assert config.allowed_tools == ["echo"]
+    assert config.allowed_tools == ["calculate"]
 
 
 @pytest.mark.asyncio
-async def test_agent_without_declared_or_disabled_tools_is_unrestricted(
+async def test_agent_without_declared_tools_gets_all_org_enabled_tools(
     session_factory,
 ):
     runtime = build_runtime(session_factory, FakeProvider(script=[{"text": "hi"}]))
-    await _register_tool(session_factory, "some_enabled_tool", enabled=True)
+    await _register_tool(session_factory, "get_time", enabled=True)
     agent_grn = await create_agent(session_factory)
     conversation = await _get_conversation(session_factory, agent_grn)
 
     config = await _resolve(session_factory, runtime, conversation)
 
-    assert config.allowed_tools is None  # preserved prior semantics
+    # No declared tools: base is every catalog tool backed by an enabled
+    # Tool resource for the org.
+    assert config.allowed_tools == ["get_time"]
 
 
 @pytest.mark.asyncio
 async def test_org_disabled_tool_restricts_undeclared_agent(session_factory):
-    """No declared tools + an org-disabled tool = registry minus disabled."""
+    """No declared tools + no enabled Tool resources = no tools exposed."""
     runtime = build_runtime(session_factory, FakeProvider(script=[{"text": "hi"}]))
-    await _register_tool(session_factory, "current_datetime", enabled=False)
+    await _register_tool(session_factory, "get_time", enabled=False)
     agent_grn = await create_agent(session_factory)
     conversation = await _get_conversation(session_factory, agent_grn)
 
     config = await _resolve(session_factory, runtime, conversation)
 
-    # Default runtime registry contains only current_datetime.
     assert config.allowed_tools == []
 
 

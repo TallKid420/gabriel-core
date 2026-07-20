@@ -275,3 +275,32 @@ class Notification(BaseModel):
     # workflow: str | None
     created_at: datetime
     read: bool = False
+
+# ---------------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------------
+
+class ToolCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=500)
+    description: str = ""
+    category: str = Field(min_length=1)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    safety_level: int = 0
+    runtime_binding: str = ""
+    execution_runtime: str = "local"
+    enabled: bool = True
+    configuration: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict | None = None
+    labels: dict[str, str] | None = None
+
+
+class ToolUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    category: str | None = None
+    parameters: dict[str, Any] | None = None
+    safety_level: int | None = None
+    runtime_binding: str | None = None
+    execution_runtime: str | None = None
+    enabled: bool | None = None
+    configuration: dict[str, Any] | None = None

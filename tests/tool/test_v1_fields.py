@@ -13,10 +13,8 @@ async def _create(service, **overrides):
         name="calculator",
         description="Evaluates arithmetic",
         category="math",
-        input_schema={},
-        output_schema={},
+        parameters={},
         safety_level=0,
-        required_capabilities=[],
     )
     fields.update(overrides)
     return await service.create_tool(**fields)

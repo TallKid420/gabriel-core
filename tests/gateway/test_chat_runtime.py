@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from gabriel.agent.grn_bindings import tool_grn
 from gabriel.agent.management import AgentManagementService
 from gabriel.agent.repository import AgentRepository
 from gabriel.conversation.message_service import MessageService
@@ -14,6 +15,13 @@ from gabriel.gateway.providers.registry import ProviderRegistry
 from gabriel.gateway.service import ChatRuntimeError, ChatRuntimeService
 from gabriel.gateway.sessions import SessionManager
 from gabriel.gateway.tools import build_default_tool_registry
+from gabriel.policy.engine import PolicyEngine
+from gabriel.policy.peel import PEEL
+from gabriel.tool.discovery import tool_indexer
+from gabriel.tool.models import SafetyLevel, ToolCategory
+from gabriel.tool.registry import FunctionRegistry
+from gabriel.tool.repository import ToolRepository
+from gabriel.tool.service import ToolService
 
 from tests.gateway.conftest import FakeProvider, make_tool_call
 
@@ -37,12 +45,36 @@ def parse_frames(frames: list[str]) -> list[tuple[str, dict]]:
 def build_runtime(session_factory, provider: FakeProvider) -> ChatRuntimeService:
     providers = ProviderRegistry(default_provider=provider.name)
     providers.register(provider)
+    fn_registry = FunctionRegistry()
+    tool_indexer.register_into(fn_registry)
     return ChatRuntimeService(
         session_factory=session_factory,
         providers=providers,
         tools=build_default_tool_registry(),
         sessions=SessionManager(),
+        fn_registry=fn_registry,
+        peel=PEEL(PolicyEngine()),
     )
+
+
+async def enable_tool(session_factory, name: str) -> None:
+    """Create an enabled Tool DB row for ``name`` under the test org."""
+    catalog = {t.name: t for t in tool_indexer.discover()}
+    discovered = catalog[name]
+    async with session_factory() as session:
+        service = ToolService(ToolRepository(session))
+        await service.create_tool(
+            org_id=ORG,
+            created_by=ALICE,
+            name=name,
+            description=discovered.description,
+            category=ToolCategory.UTILITY,
+            parameters=discovered.parameters,
+            safety_level=SafetyLevel.SAFE,
+            runtime_binding=discovered.runtime_binding,
+            enabled=True,
+            tool_grn=tool_grn(name, ORG, version=1),
+        )
 
 
 async def create_conversation(session_factory, agent_grn: str | None = None) -> str:
@@ -147,12 +179,17 @@ async def test_stream_turn_uses_agent_configuration(session_factory):
 async def test_tool_loop_executes_and_feeds_back_results(session_factory):
     provider = FakeProvider(
         script=[
-            {"text": "", "tool_calls": [make_tool_call("current_datetime")]},
-            {"text": "It is now."},
+            {
+                "text": "",
+                "tool_calls": [make_tool_call("calculate", expression="1 + 1")],
+            },
+            {"text": "It is 2."},
         ]
     )
     runtime = build_runtime(session_factory, provider)
-    conversation_grn = await create_conversation(session_factory)
+    await enable_tool(session_factory, "calculate")
+    agent_grn = await create_agent(session_factory, allowed_tools=["calculate"])
+    conversation_grn = await create_conversation(session_factory, agent_grn=agent_grn)
 
     frames = parse_frames(
         [
@@ -161,7 +198,7 @@ async def test_tool_loop_executes_and_feeds_back_results(session_factory):
                 org_id=ORG,
                 principal_id=ALICE,
                 conversation_grn=conversation_grn,
-                content="What time is it?",
+                content="What is 1 + 1?",
                 model_override="fake-model",
             )
         ]
@@ -172,9 +209,9 @@ async def test_tool_loop_executes_and_feeds_back_results(session_factory):
     assert events[-1] == "done"
 
     tool_result = next(d for e, d in frames if e == "tool_result")
-    assert tool_result["name"] == "current_datetime"
+    assert tool_result["name"] == "calculate"
     assert tool_result["success"] is True
-    assert "iso" in json.loads(tool_result["content"])
+    assert "result" in json.loads(tool_result["content"])
 
     # Second provider call got the tool-role message appended.
     second_call = provider.calls[1]
@@ -188,7 +225,7 @@ async def test_tool_loop_executes_and_feeds_back_results(session_factory):
             conversation_grn, org_id=ORG
         )
     assert [m.role.value for m in items] == ["user", "tool", "assistant"]
-    assert items[2].content == "It is now."
+    assert items[2].content == "It is 2."
 
 
 @pytest.mark.asyncio

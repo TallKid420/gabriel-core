@@ -38,6 +38,8 @@ from gabriel.policy.engine import PolicyEngine
 from gabriel.policy.models import PolicyStatement
 from gabriel.policy.peel import PEEL
 from gabriel.policy.repository import PolicyRepository
+from gabriel.tool.discovery import tool_indexer
+from gabriel.tool.registry import function_registry
 from gabriel.policy.service import PolicyService
 from gabriel.runtime.context import ExecutionContext
 from gabriel.resource.grn import GRN
@@ -422,7 +424,12 @@ async def initialize_gateway_state(app) -> None:
         provider_registry = ProviderRegistry()
         register_default_providers(provider_registry)
         app.state.llm_provider_registry = provider_registry
+        # Discovery is the sole source of tool registration: it populates the
+        # process-wide FunctionRegistry (used by ToolExecutor to resolve
+        # callables by GRN binding) and builds the LLM-facing catalog.
+        tool_indexer.register_into(function_registry)
         app.state.runtime_tool_registry = build_default_tool_registry()
+        app.state.fn_registry = function_registry
         app.state.chat_session_manager = SessionManager()
 
         # Document & Knowledge (Phase 4): hot-swappable embedding providers
@@ -513,6 +520,8 @@ def get_chat_runtime_service(request: Request):
                 tools=request.app.state.runtime_tool_registry,
                 sessions=request.app.state.chat_session_manager,
                 retriever=get_knowledge_retriever(request),
+                fn_registry=request.app.state.fn_registry,
+                peel=request.app.state.peel,
         )
 
 

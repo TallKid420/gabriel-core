@@ -100,7 +100,7 @@ def test_list_runtime_tools(client, make_auth_headers):
     response = client.get("/api/v1/gateway/tools", headers=headers)
     assert response.status_code == 200, response.text
     names = [spec["function"]["name"] for spec in response.json()["items"]]
-    assert "current_datetime" in names
+    assert "calculate" in names
 
 
 def test_stream_chat_turn_end_to_end(client, make_auth_headers):

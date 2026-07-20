@@ -8,7 +8,9 @@ This module provides:
   for callables already registered in the Phase-4
   :class:`~gabriel.tool.registry.FunctionRegistry`);
 * :class:`RuntimeToolRegistry` — named lookup + LLM tool-spec export;
-* :class:`CurrentDatetimeTool` — built-in proof-of-concept tool;
+* :func:`build_default_tool_registry` — builds the registry from the
+  dynamically discovered tool catalog (see
+  :mod:`gabriel.tool.discovery`) instead of a hard-coded tool list;
 * :func:`execute_tool_call` — run one model-requested call and normalise the
   result into a ``tool``-role message payload for the follow-up LLM turn.
 
@@ -26,7 +28,6 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
 from gabriel.gateway.providers.base import ToolCallRequest
@@ -147,42 +148,6 @@ class FunctionTool(RuntimeTool):
         )
 
 
-class CurrentDatetimeTool(RuntimeTool):
-    """Built-in proof-of-concept tool: report the current date and time."""
-
-    @property
-    def name(self) -> str:
-        return "current_datetime"
-
-    @property
-    def description(self) -> str:
-        return "Get the current date and time (UTC, ISO 8601)."
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "timezone": {
-                    "type": "string",
-                    "description": "Only 'utc' is supported.",
-                    "default": "utc",
-                }
-            },
-            "required": [],
-        }
-
-    async def run(self, **kwargs: Any) -> dict[str, Any]:
-        now = datetime.now(timezone.utc)
-        return {
-            "iso": now.isoformat(),
-            "date": now.date().isoformat(),
-            "time": now.time().replace(microsecond=0).isoformat(),
-            "weekday": now.strftime("%A"),
-            "timezone": "UTC",
-        }
-
-
 class RuntimeToolRegistry:
     """Named registry of runtime tools, exported to providers as LLM specs."""
 
@@ -226,9 +191,25 @@ class RuntimeToolRegistry:
 
 
 def build_default_tool_registry() -> RuntimeToolRegistry:
-    """Registry pre-loaded with the built-in tools."""
+    """Registry pre-loaded from the dynamically discovered tool catalog.
+
+    Uses :data:`gabriel.tool.discovery.tool_indexer` to walk
+    ``gabriel.tool.library`` (and any third-party ``gabriel.tools`` entry
+    points) instead of a hard-coded tool list, so newly added library tools
+    are exposed automatically without touching this module.
+    """
+    from gabriel.tool.discovery import tool_indexer
+
     registry = RuntimeToolRegistry()
-    registry.register(CurrentDatetimeTool())
+    for discovered in tool_indexer.discover():
+        registry.register(
+            FunctionTool(
+                _name=discovered.name,
+                _description=discovered.description,
+                _fn=discovered.fn,
+                _parameters=discovered.parameters,
+            )
+        )
     return registry
 
 

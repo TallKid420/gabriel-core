@@ -1,31 +1,28 @@
-"""seed_tools.py — Bootstrap all platform Tool resources for an organisation.
+"""seed_tools.py — Synchronize discovered platform tools into an org's catalog.
 
 Usage
 -----
     python scripts/seed_tools.py --org-id <ORG_ID> [--created-by <PRINCIPAL_ID>]
 
-This script is idempotent: tools that already exist (matched by name + org_id)
-are skipped.  Re-running it after adding new platform tools will only insert
-the missing rows.
+The set of tools is no longer a hard-coded registry: it is derived from
+:data:`gabriel.tool.discovery.tool_indexer`, which walks
+``src/gabriel/tool/library`` (plus any third-party ``gabriel.tools`` entry
+points) at call time. This script's only remaining job is to keep the
+per-organization ``Tool`` database rows in sync with that catalog:
 
-Tool inventory (40 tools)
---------------------------
-  SAFE  (15):  calculate, convert_units, roll_dice,
-               count_words, encode_base64, decode_base64, hash_text,
-               get_time, days_between, get_current_weather,
-               generate_uuid, random_choice, random_number,
-               ask_question, list_tools
+* A tool present in the catalog but missing for the org is created, and
+  enabled by default (new organizations start with every prebuilt tool on).
+* A tool that already has a row for the org has its descriptive fields
+  (description, schemas, category, safety level, required capabilities,
+  runtime binding) refreshed, but its ``enabled`` flag is left untouched —
+  an operator's manual enable/disable toggle is never overwritten by a
+  re-sync.
 
-  FILE   (3):  find_file, search_documents, semantic_search
-
-  EMAIL (13):  send_email, list_emails, get_email, draft_email,
-               reply_email, forward_email, archive_email, mark_email,
-               delete_email, label_email, move_email, search_emails,
-               get_thread
-
-  CALENDAR (9): list_calendars, list_events, get_event, create_event,
-                update_event, delete_event, find_free_slot,
-                accept_invitation, decline_invitation
+``_TOOL_METADATA`` below only supplies the handful of fields that cannot be
+derived from a function's signature/docstring (category, safety level,
+required capabilities, and richer input/output JSON Schemas than
+``inspect``-based inference can produce). Tools with no metadata entry still
+get seeded, using conservative defaults.
 """
 
 from __future__ import annotations
@@ -42,8 +39,10 @@ from gabriel.logging_config import configure_logging, get_logger
 configure_logging()
 logger = get_logger(__name__)
 
+from gabriel.agent.grn_bindings import tool_grn
 from gabriel.resource.exceptions import DuplicateResourceError
-from gabriel.tool.models import SafetyLevel, ToolCategory
+from gabriel.tool.discovery import tool_indexer
+from gabriel.tool.models import SafetyLevel, Tool, ToolCategory
 from gabriel.tool.repository import ToolRepository
 from gabriel.tool.service import ToolService
 
@@ -73,9 +72,14 @@ def _result(**props: dict) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Tool definitions
+# Tool metadata overrides
 # ---------------------------------------------------------------------------
-# Each entry is a dict whose keys match ToolService.create_tool kwargs.
+# The catalog of *which* tools exist comes from ``tool_indexer.discover()``
+# at sync time. This table only supplies fields the indexer cannot derive
+# from a function's signature/docstring (category, safety level, required
+# capabilities, and hand-written schemas richer than signature inference).
+# Entries are keyed by bare tool name; a discovered tool with no entry here
+# still gets seeded, using the conservative defaults in ``_sync_org_tools``.
 # ---------------------------------------------------------------------------
 
 _PLATFORM_TOOLS: list[dict[str, Any]] = [
@@ -717,10 +721,24 @@ _PLATFORM_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+_METADATA_BY_NAME: dict[str, dict[str, Any]] = {t["name"]: t for t in _PLATFORM_TOOLS}
+
 
 # ---------------------------------------------------------------------------
-# Core seed function
+# Core sync function
 # ---------------------------------------------------------------------------
+
+
+def _resolve_fields(discovered: Tool) -> dict[str, Any]:
+    """Merge a discovered tool with its (optional) metadata override."""
+    meta = _METADATA_BY_NAME.get(discovered.name, {})
+    return {
+        "description": discovered.description or meta.get("description", ""),
+        "category": meta.get("category", ToolCategory.UTILITY),
+        "parameters": meta.get("input_schema", discovered.parameters),
+        "safety_level": meta.get("safety_level", SafetyLevel.SAFE),
+        "runtime_binding": discovered.runtime_binding,
+    }
 
 
 async def seed_tools(
@@ -729,36 +747,53 @@ async def seed_tools(
     created_by: str,
     session_factory: async_sessionmaker[AsyncSession] = async_session,
 ) -> dict[str, int]:
-    """Upsert all platform tools for *org_id*.
+    """Synchronize the discovered tool catalog with *org_id*'s ``Tool`` rows.
 
-    Returns a dict with keys ``created`` and ``skipped``.
+    New tools are created and enabled by default. Tools that already have a
+    row for the org are refreshed (description, schemas, category, safety
+    level, required capabilities, runtime binding) but their existing
+    ``enabled`` toggle is preserved — this call never re-enables or disables
+    a tool an operator has explicitly toggled.
+
+    Returns a dict with keys ``created`` and ``updated``.
     """
     created = 0
-    skipped = 0
+    updated = 0
+
+    catalog = tool_indexer.discover()
 
     async with session_factory() as session:
         service = ToolService(ToolRepository(session))
 
-        for tool_def in _PLATFORM_TOOLS:
-            # Check if a tool with this name already exists for the org.
-            existing = await service.get_tool_by_name(org_id, tool_def["name"])
-            if existing is not None:
-                skipped += 1
+        for discovered in catalog:
+            fields = _resolve_fields(discovered)
+            existing = await service.get_tool_by_name(org_id, discovered.name)
+
+            if existing is None:
+                try:
+                    await service.create_tool(
+                        org_id=org_id,
+                        created_by=created_by,
+                        name=discovered.name,
+                        enabled=True,
+                        tool_grn=tool_grn(discovered.name, org_id, version=1),
+                        **fields,
+                    )
+                    created += 1
+                    logger.info("  [+] %s (%s)", discovered.name, fields["category"].value)
+                except DuplicateResourceError:
+                    logger.info("  [~] %s already exists - skipped", discovered.name)
                 continue
 
-            try:
-                await service.create_tool(
-                    org_id=org_id,
-                    created_by=created_by,
-                    **tool_def,
-                )
-                created += 1
-                logger.info("  [+] %s (%s)", tool_def["name"], tool_def["category"].value)
-            except DuplicateResourceError:
-                skipped += 1
-                logger.info("  [~] %s already exists - skipped", tool_def["name"])
+            await service.update_tool(
+                str(existing.grn),
+                updated_by=created_by,
+                **fields,
+            )
+            updated += 1
+            logger.info("  [~] %s refreshed (enabled=%s)", discovered.name, existing.enabled)
 
-    return {"created": created, "skipped": skipped}
+    return {"created": created, "updated": updated}
 
 
 # ---------------------------------------------------------------------------
@@ -769,11 +804,11 @@ async def seed_tools(
 async def _async_main(args: argparse.Namespace) -> None:
     logger.info("Seeding tools for org_id='%s' created_by='%s' ...", args.org_id, args.created_by)
     counts = await seed_tools(org_id=args.org_id, created_by=args.created_by)
-    total = counts["created"] + counts["skipped"]
+    total = counts["created"] + counts["updated"]
     logger.info(
-        "Done. %s tool(s) created, %s skipped (%s total in manifest).",
+        "Done. %s tool(s) created, %s refreshed (%s total in catalog).",
         counts["created"],
-        counts["skipped"],
+        counts["updated"],
         total,
     )
 

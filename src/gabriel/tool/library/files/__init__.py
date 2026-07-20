@@ -1,16 +1,9 @@
-"""File tool library — self-registers at import time."""
+"""File tool library — discovered by :class:`gabriel.tool.discovery.ToolLibraryIndexer`."""
 
-from gabriel.tool.library.files.find_file import find_file
-from gabriel.tool.library.files.search_documents import search_documents
-from gabriel.tool.library.files.semantic_search import semantic_search
-from gabriel.tool.registry import function_registry
+from .find_file import find_file
+from .search_documents import search_documents
+from .semantic_search import semantic_search
 
-function_registry.register_many(
-    {
-        "file.find_file": find_file,
-        "file.search_documents": search_documents,
-        "file.semantic_search": semantic_search,
-    }
-)
+TOOL_NAMESPACE = "file"
 
 __all__ = ["find_file", "search_documents", "semantic_search"]

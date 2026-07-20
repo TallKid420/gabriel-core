@@ -106,12 +106,11 @@ class Tool(Resource):
     name: str
     description: str
     category: ToolCategory
-    input_schema: dict[str, Any]
-    output_schema: dict[str, Any]
+    parameters: dict[str, Any]
     safety_level: SafetyLevel
-    required_capabilities: list[str]
     runtime_binding: str
     execution_runtime: ExecutionRuntime = ExecutionRuntime.LOCAL
+    fn: Any | None = None  # runtime callable; not persisted
     enabled: bool = True
     configuration: dict[str, Any] = {}
 
@@ -123,10 +122,8 @@ class Tool(Resource):
             "name": self.name,
             "description": self.description,
             "category": self.category.value,
-            "input_schema": self.input_schema,
-            "output_schema": self.output_schema,
+            "parameters": self.parameters,
             "safety_level": self.safety_level.value,
-            "required_capabilities": self.required_capabilities,
             "runtime_binding": self.runtime_binding,
             "execution_runtime": self.execution_runtime.value,
             "enabled": self.enabled,
@@ -149,16 +146,15 @@ class Tool(Resource):
         name: str,
         description: str,
         category: ToolCategory,
-        input_schema: dict[str, Any],
-        output_schema: dict[str, Any],
+        parameters: dict[str, Any],
         safety_level: SafetyLevel,
-        required_capabilities: list[str],
         runtime_binding: str,
         execution_runtime: ExecutionRuntime = ExecutionRuntime.LOCAL,
         enabled: bool = True,
         configuration: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
         metadata: dict[str, Any] | None = None,
+        fn: Any | None = None,
     ) -> "Tool":
         return cls(
             grn=grn,
@@ -171,10 +167,14 @@ class Tool(Resource):
             name=name,
             description=description,
             category=category,
-            input_schema=input_schema,
-            output_schema=output_schema,
+            parameters=parameters
+            if parameters is not None
+            else {
+                "input": fn.__annotations__.get("input") if fn else None,
+                "output": fn.__annotations__.get("return") if fn else None,
+            },
+            fn=fn,
             safety_level=safety_level,
-            required_capabilities=required_capabilities,
             runtime_binding=runtime_binding,
             execution_runtime=execution_runtime,
             enabled=enabled,

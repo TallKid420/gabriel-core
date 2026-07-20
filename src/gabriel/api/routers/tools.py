@@ -14,12 +14,13 @@ tools an agent may use.
 """
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from gabriel.api.schema import (
+    ToolCreateRequest,
+    ToolUpdateRequest,
+)
 from gabriel.api.dependencies import get_db_session_factory, get_execution_context
 from gabriel.api.errors import GabrielAPIError
 from gabriel.api.tenancy import require_same_org
@@ -31,36 +32,6 @@ from gabriel.tool.repository import ToolRepository
 from gabriel.tool.service import ToolService
 
 router = APIRouter(prefix="/tools", tags=["Tools"])
-
-
-class ToolCreateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=500)
-    description: str = ""
-    category: str = Field(min_length=1)
-    input_schema: dict[str, Any] = Field(default_factory=dict)
-    output_schema: dict[str, Any] = Field(default_factory=dict)
-    safety_level: int = 0
-    required_capabilities: list[str] = Field(default_factory=list)
-    runtime_binding: str = ""
-    execution_runtime: str = "local"
-    enabled: bool = True
-    configuration: dict[str, Any] = Field(default_factory=dict)
-    metadata: dict | None = None
-    labels: dict[str, str] | None = None
-
-
-class ToolUpdateRequest(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    category: str | None = None
-    input_schema: dict[str, Any] | None = None
-    output_schema: dict[str, Any] | None = None
-    safety_level: int | None = None
-    required_capabilities: list[str] | None = None
-    runtime_binding: str | None = None
-    execution_runtime: str | None = None
-    enabled: bool | None = None
-    configuration: dict[str, Any] | None = None
 
 
 def _parse_category(value: str | None) -> ToolCategory | None:
@@ -106,9 +77,9 @@ async def create_tool(
     context: ExecutionContext = Depends(get_execution_context),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_session_factory),
 ):
-    category = _parse_category(body.category)
-    runtime = _parse_runtime(body.execution_runtime)
-    safety = _parse_safety(body.safety_level)
+    category = _parse_category(body.category) or ToolCategory.CUSTOM
+    runtime = _parse_runtime(body.execution_runtime) or ExecutionRuntime.LOCAL
+    safety = _parse_safety(body.safety_level) or SafetyLevel.SAFE
     async with session_factory() as session:
         try:
             tool = await _service(session).create_tool(
@@ -117,10 +88,8 @@ async def create_tool(
                 name=body.name,
                 description=body.description,
                 category=category,
-                input_schema=body.input_schema,
-                output_schema=body.output_schema,
+                parameters=body.parameters,
                 safety_level=safety,
-                required_capabilities=body.required_capabilities,
                 runtime_binding=body.runtime_binding,
                 execution_runtime=runtime,
                 enabled=body.enabled,
@@ -192,10 +161,8 @@ async def update_tool(
                 name=body.name,
                 description=body.description,
                 category=category,
-                input_schema=body.input_schema,
-                output_schema=body.output_schema,
+                parameters=body.parameters,
                 safety_level=safety,
-                required_capabilities=body.required_capabilities,
                 runtime_binding=body.runtime_binding,
                 execution_runtime=runtime,
                 enabled=body.enabled,

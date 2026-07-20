@@ -1,0 +1,250 @@
+.E.......                                                                [100%]
+=================================== ERRORS ====================================
+____________ ERROR at setup of test_list_providers_reports_health _____________
+
+self = <ProactorEventLoop running=False closed=True debug=False>
+callback = <bound method BaseProtocol._on_waiter_completed of <asyncpg.protocol.protocol.Protocol object at 0x000001AE4793F5F0>>
+context = <_contextvars.Context object at 0x000001AE47CA40C0>
+args = (<Future finished exception=AttributeError("'NoneType' object has no attribute 'send'")>,)
+
+    def call_soon(self, callback, *args, context=None):
+        """Arrange for a callback to be called as soon as possible.
+    
+        This operates as a FIFO queue: callbacks are called in the
+        order in which they are registered.  Each callback will be
+        called exactly once.
+    
+        Any positional arguments after the callback will be passed to
+        the callback when it is called.
+        """
+>       self._check_closed()
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\asyncio\base_events.py:833: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ProactorEventLoop running=False closed=True debug=False>
+
+    def _check_closed(self):
+        if self._closed:
+>           raise RuntimeError('Event loop is closed')
+E           RuntimeError: Event loop is closed
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\asyncio\base_events.py:556: RuntimeError
+
+During handling of the above exception, another exception occurred:
+
+fixturedef = <FixtureDef argname='client' scope='function' baseid='tests/api'>
+request = <SubRequest 'client' for <Function test_list_providers_reports_health>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        if (
+            fixturedef.argname == "event_loop_policy"
+            and fixturedef.func.__module__ != __name__
+        ):
+            warnings.warn(
+                PytestDeprecationWarning(_EVENT_LOOP_POLICY_FIXTURE_DEPRECATION_WARNING),
+            )
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:924: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\api\conftest.py:66: in client
+    with TestClient(app) as test_client:
+         ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:697: in __enter__
+    portal.call(self.wait_startup)
+.venv\Lib\site-packages\anyio\from_thread.py:338: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\concurrent\futures\_base.py:460: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\concurrent\futures\_base.py:402: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:263: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:732: in wait_startup
+    await receive()
+.venv\Lib\site-packages\starlette\testclient.py:723: in receive
+    self.task.result()
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\concurrent\futures\_base.py:453: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\concurrent\futures\_base.py:402: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:263: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:713: in lifespan
+    await self.app(scope, self.stream_receive.receive, self.stream_send.send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:151: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:80: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:103: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:49: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2535: in app
+    await self.lifespan(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:638: in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:232: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+               ^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:232: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+               ^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+src\gabriel\api\app.py:76: in lifespan
+    await initialize_gateway_state(app)
+src\gabriel\api\dependencies.py:371: in initialize_gateway_state
+    event_store = await _build_persisted_event_store()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\gabriel\api\dependencies.py:351: in _build_persisted_event_store
+    await conn.run_sync(Base.metadata.create_all)
+.venv\Lib\site-packages\sqlalchemy\ext\asyncio\engine.py:888: in run_sync
+    return await greenlet_spawn(
+.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py:201: in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:5930: in create_all
+    bind._run_ddl_visitor(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:964: in visit_metadata
+    [t for t in tables if self._can_create_table(t)]
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:929: in _can_create_table
+    return not self.checkfirst or not self.dialect.has_table(
+.venv\Lib\site-packages\sqlalchemy\engine\reflection.py:90: in cache
+    return fn(self, con, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\base.pyc:\Users\EvanN\Desktop\gabriel-core\.venv\Lib\site-packages\aiosqlite\core.py:127: DeprecationWarning: There is no current event loop
+  future = asyncio.get_event_loop().create_future()
+:3624: in has_table
+    return bool(connection.scalar(query, {"table_name": table_name}))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1310: in scalar
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\elements.py:544: in _execute_on_scalar
+    return self._execute_on_connection(
+.venv\Lib\site-packages\sqlalchemy\sql\elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2368: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py:585: in execute
+    self._adapt_connection.await_(
+.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py:132: in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py:196: in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py:520: in _prepare_and_execute
+    await adapt_connection._start_transaction()
+.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py:850: in _start_transaction
+    self._handle_exception(error)
+.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py:799: in _handle_exception
+    raise error
+.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py:848: in _start_transaction
+    await self._transaction.start()
+.venv\Lib\site-packages\asyncpg\transaction.py:146: in start
+    await self._connection.execute(query)
+.venv\Lib\site-packages\asyncpg\connection.py:354: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncpg/protocol/protocol.pyx:369: in query
+    return await waiter
+asyncpg/protocol/protocol.pyx:362: in asyncpg.protocol.protocol.BaseProtocol.query
+    self._simple_query(query)  # network op
+asyncpg/protocol/coreproto.pyx:1174: in asyncpg.protocol.protocol.CoreProtocol._simple_query
+    ???
+asyncpg/protocol/protocol.pyx:956: in asyncpg.protocol.protocol.BaseProtocol._write
+    self.transport.write(memoryview(buf))
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\asyncio\proactor_events.py:366: in write
+    self._loop_writing(data=bytes(data))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_ProactorSocketTransport fd=1476 read=<_OverlappedFuture cancelled>>
+f = None, data = b'Q\x00\x00\x00\x0bBEGIN;\x00'
+
+    def _loop_writing(self, f=None, data=None):
+        try:
+            if f is not None and self._write_fut is None and self._closing:
+                # XXX most likely self._force_close() has been called, and
+                # it has set self._write_fut to None.
+                return
+            assert f is self._write_fut
+            self._write_fut = None
+            self._pending_write = 0
+            if f:
+                f.result()
+            if data is None:
+                data = self._buffer
+                self._buffer = None
+            if not data:
+                if self._closing:
+                    self._loop.call_soon(self._call_connection_lost, None)
+                if self._eof_written:
+                    self._sock.shutdown(socket.SHUT_WR)
+                # Now that we've reduced the buffer size, tell the
+                # protocol to resume writing if it was paused.  Note that
+                # we do this last since the callback is called immediately
+                # and it may add more data to the buffer (even causing the
+                # protocol to be paused again).
+                self._maybe_resume_protocol()
+            else:
+>               self._write_fut = self._loop._proactor.send(self._sock, data)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'NoneType' object has no attribute 'send'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\Lib\asyncio\proactor_events.py:402: AttributeError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  c:\Users\EvanN\Desktop\gabriel-core\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+ERROR tests/api/test_gateway_api.py::test_list_providers_reports_health - Att...
+8 passed, 1 warning, 1 error in 6.26s

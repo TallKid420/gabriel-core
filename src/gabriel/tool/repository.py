@@ -45,10 +45,8 @@ class ToolRepository:
         existing.name = tool_orm.name
         existing.description = tool_orm.description
         existing.category = tool_orm.category
-        existing.input_schema = tool_orm.input_schema
-        existing.output_schema = tool_orm.output_schema
+        existing.parameters = tool_orm.parameters
         existing.safety_level = tool_orm.safety_level
-        existing.required_capabilities = tool_orm.required_capabilities
         existing.runtime_binding = tool_orm.runtime_binding
         existing.execution_runtime = tool_orm.execution_runtime
         existing.enabled = tool_orm.enabled

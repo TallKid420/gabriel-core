@@ -21,13 +21,16 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids import cycles
     from gabriel.knowledge.retrieval import KnowledgeRetriever
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from gabriel.agent.grn_bindings import tool_grn
 from gabriel.agent.mappers import orm_to_domain as agent_orm_to_domain
 from gabriel.agent.models import Agent
 from gabriel.agent.specification import AgentSpecification
@@ -36,6 +39,7 @@ from gabriel.conversation.message_models import Message, MessageRole
 from gabriel.conversation.message_service import ConversationClosedError, MessageService
 from gabriel.conversation.models import Conversation
 from gabriel.conversation.service import ConversationService
+from gabriel.events.repository import EventRepository
 from gabriel.gateway.prompt import DEFAULT_CONTEXT_WINDOW, ContextBlock, PromptAssembler
 from gabriel.gateway.providers.base import (
     ChatMessage,
@@ -46,11 +50,27 @@ from gabriel.gateway.providers.base import (
 )
 from gabriel.gateway.providers.registry import ProviderRegistry
 from gabriel.gateway.sessions import SessionManager
-from gabriel.gateway.tools import RuntimeToolRegistry, execute_tool_call
+from gabriel.gateway.tools import RuntimeToolRegistry, ToolResult
+from gabriel.identity.exceptions import InvalidPrincipalIDError
+from gabriel.identity.models import Capability, PrincipalType
+from gabriel.identity.principal import Principal
+from gabriel.identity.principal_id import PrincipalID
 from gabriel.logging_config import get_logger
+from gabriel.policy.exceptions import UnauthorizedError
+from gabriel.policy.peel import PEEL
 from gabriel.resource.exceptions import ResourceNotFoundError
+from gabriel.runtime.context import ExecutionContext
+from gabriel.tool.exceptions import (
+    ConfirmationRequiredError,
+    SchemaValidationError,
+    ToolInvocationError,
+    ToolNotFoundError,
+)
+from gabriel.tool.executor import ToolExecutor
 from gabriel.tool.mappers import orm_to_domain as tool_orm_to_domain
+from gabriel.tool.registry import FunctionRegistry
 from gabriel.tool.repository import ToolRepository
+from gabriel.tool.service import ToolService
 
 logger = get_logger(__name__)
 
@@ -71,7 +91,7 @@ class AgentRuntimeConfig:
     model: str
     temperature: float
     max_tokens: int | None
-    allowed_tools: list[str] | None
+    allowed_tools: list[str]
     context_window: int = DEFAULT_CONTEXT_WINDOW
     knowledge_sources: tuple[str, ...] = ()
     document_collections: tuple[str, ...] = ()
@@ -102,6 +122,8 @@ class ChatRuntimeService:
         providers: ProviderRegistry,
         tools: RuntimeToolRegistry,
         sessions: SessionManager,
+        fn_registry: FunctionRegistry,
+        peel: PEEL,
         prompt_assembler: PromptAssembler | None = None,
         retriever: "KnowledgeRetriever | None" = None,
         max_tool_iterations: int = MAX_TOOL_ITERATIONS,
@@ -110,6 +132,8 @@ class ChatRuntimeService:
         self.providers = providers
         self.tools = tools
         self.sessions = sessions
+        self.fn_registry = fn_registry
+        self.peel = peel
         self.prompt = prompt_assembler or PromptAssembler()
         self.retriever = retriever
         self.max_tool_iterations = max_tool_iterations
@@ -160,7 +184,7 @@ class ChatRuntimeService:
         model = model_override or ""
         temperature = 0.0
         max_tokens: int | None = None
-        allowed_tools: list[str] | None = None
+        allowed_tools: list[str] = []
         knowledge_sources: tuple[str, ...] = ()
         document_collections: tuple[str, ...] = ()
 
@@ -173,10 +197,10 @@ class ChatRuntimeService:
             model = model_override or spec.model or ""
             temperature = runtime_config.temperature
             max_tokens = runtime_config.max_tokens
-            # Tool exposure comes entirely from the agent configuration:
-            # an agent that declares tools is restricted to them; an agent
-            # with no declared tools may use every registered runtime tool.
-            # ``disabled_tools`` and org-disabled Tool resources always win.
+            # Tool exposure is opt-in (ADR-019/ADR-024): a tool is only
+            # usable when it is in the discovery catalog, backed by an
+            # enabled Tool resource for the org, and allowed by the agent
+            # specification. See ``_resolve_allowed_tools`` for details.
             allowed_tools = await self._resolve_allowed_tools(session, spec, org_id)
             knowledge_sources = tuple(spec.knowledge_sources or ())
             document_collections = tuple(spec.document_collections or ())
@@ -200,44 +224,167 @@ class ChatRuntimeService:
 
     async def _resolve_allowed_tools(
         self, session: AsyncSession, spec: AgentSpecification, org_id: str
-    ) -> list[str] | None:
+    ) -> list[str]:
         """Compute the runtime tool allow-list for one agent configuration.
 
-        Precedence (deny wins, mirroring PEEL semantics — ADR-008):
-        1. start from the agent's declared tools (or every registered
-           runtime tool when the agent declares none);
-        2. drop anything in the agent's ``disabled_tools``;
-        3. drop any Tool resource the org has disabled (``Tool.enabled``).
+        Opt-in governance (ADR-019/ADR-024): a tool is only exposed to the
+        model when it is simultaneously —
 
-        Returns ``None`` (= unrestricted) only when the agent declares no
-        tools and nothing is disabled, preserving prior behavior.
+        (A) present in the discovery catalog (:attr:`tools`, built from
+            :class:`gabriel.tool.discovery.ToolLibraryIndexer`);
+        (B) backed by an *enabled* ``Tool`` resource for the org (absence of
+            a Tool row, or ``enabled=False``, excludes it — no more
+            fail-open default);
+        (C) allowed by the agent's :class:`AgentSpecification` (its declared
+            tools, or every catalog/enabled tool when none are declared,
+            minus anything in ``disabled_tools``).
         """
-        declared = spec.tool_names()
+        catalog = set(self.tools.list_tools())
+        enabled = await self._org_enabled_tool_names(session, org_id)
+        allowed_catalog = catalog & enabled
+        declared = set(spec.tool_names())
         disabled = set(spec.disabled_tool_names())
-        disabled |= await self._org_disabled_tool_names(session, org_id)
-        if not declared and not disabled:
-            return None
-        base = declared or self.tools.list_tools()
-        return [name for name in base if name not in disabled]
+        base = declared if declared else allowed_catalog
+        return sorted((base & allowed_catalog) - disabled)
 
-    async def _org_disabled_tool_names(
+    async def _org_enabled_tool_names(
         self, session: AsyncSession, org_id: str
     ) -> set[str]:
-        """Names of Tool resources the org has switched off.
+        """Names of Tool resources enabled for the org.
 
-        Degrades to an empty set on lookup failure — tool governance must
-        never break a chat turn (same resilience contract as retrieval).
+        Fail-secure: degrades to an empty set (no tools exposed) on lookup
+        failure. Under the opt-in governance model an enabled ``Tool`` row
+        is required for exposure, so an unreadable catalog must never widen
+        access — it can only narrow it.
         """
         try:
             orms = await ToolRepository(session).list_for_org(org_id)
-        except Exception:  # noqa: BLE001 - resilience: never break a turn
+        except Exception:  # noqa: BLE001 - fail-secure: never widen access
             logger.exception(
                 "Tool enablement lookup failed for org %s; "
-                "continuing with agent-declared tools only",
+                "no tools will be exposed this turn",
                 org_id,
             )
             return set()
-        return {tool_orm_to_domain(orm).name for orm in orms if not orm.enabled}
+        return {tool_orm_to_domain(orm).name for orm in orms if orm.enabled}
+
+    # ------------------------------------------------------------------
+    # Governed tool execution (ADR-003 events, ADR-019 PEEL, ADR-024 schema)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_principal_id(org_id: str, principal_id: str) -> PrincipalID:
+        """Parse a GRN-style principal id, falling back to a synthetic one.
+
+        Callers such as tests may pass a bare identifier (e.g. ``"alice"``)
+        rather than the ``principal://org/type/id`` form; that is treated as
+        a plain user identifier scoped to ``org_id``.
+        """
+        try:
+            return PrincipalID.parse(principal_id)
+        except InvalidPrincipalIDError:
+            return PrincipalID(
+                org_id=org_id,
+                principal_type="user",
+                principal_identifier=principal_id,
+            )
+
+    @staticmethod
+    def _parse_correlation_id(correlation_id: str | None) -> UUID:
+        if correlation_id:
+            try:
+                return UUID(correlation_id)
+            except (ValueError, AttributeError):
+                pass
+        return uuid4()
+
+    def _build_execution_context(
+        self, *, org_id: str, principal_id: str, correlation_id: str | None
+    ) -> ExecutionContext:
+        """Execution context for one governed tool invocation.
+
+        Grants exactly ``call_tool`` — the capability PEEL requires for the
+        ``tool:invoke`` action (see :mod:`gabriel.policy.capabilities`) — so
+        that the identity-based fallback check passes for any principal
+        driving a chat turn. Org-level policy configuration (PEEL's
+        policy-based branch) is still enforced regardless of this grant.
+        """
+        pid = self._resolve_principal_id(org_id, principal_id)
+        principal = Principal(
+            id=pid,
+            organization_id=org_id,
+            principal_type=PrincipalType.USER,
+            display_name=principal_id,
+            capabilities=set(),
+        )
+        return ExecutionContext(
+            execution_id=uuid4(),
+            principal=principal,
+            organization=org_id,
+            correlation_id=self._parse_correlation_id(correlation_id),
+            causation_id=None,
+            session_id=None,
+            resource=None,
+            started_at=datetime.now(timezone.utc),
+            capabilities=frozenset({Capability.CALL_TOOL.value}),
+            metadata={},
+        )
+
+    async def _invoke_tool(
+        self,
+        *,
+        org_id: str,
+        principal_id: str,
+        correlation_id: str | None,
+        call: ToolCallRequest,
+        allowed: list[str],
+    ) -> ToolResult:
+        """Execute one model-requested tool call via the governed
+        :class:`gabriel.tool.executor.ToolExecutor`, never raising.
+
+        Every call is resource-addressed by GRN and cleared through PEEL,
+        schema validation, and audit-event emission — the Gateway no longer
+        dispatches tool callables directly (see ``execute_tool_call`` for
+        the legacy, ungoverned path this replaces).
+        """
+        if call.name not in allowed:
+            error = f"Tool '{call.name}' is not allowed for this agent."
+            return ToolResult(
+                tool_call_id=call.id, name=call.name,
+                content=json.dumps({"error": error}), success=False, error=error,
+            )
+
+        grn = tool_grn(call.name, org_id, version=1)
+        context = self._build_execution_context(
+            org_id=org_id, principal_id=principal_id, correlation_id=correlation_id
+        )
+        try:
+            async with self._session_factory() as session:
+                event_repo = EventRepository(session)
+                tool_service = ToolService(ToolRepository(session), event_repo)
+                executor = ToolExecutor(tool_service, self.fn_registry, self.peel, event_repo)
+                result = await executor.invoke(context, grn, call.arguments)
+            return ToolResult(
+                tool_call_id=call.id,
+                name=call.name,
+                content=json.dumps(result, default=str),
+            )
+        except (
+            ToolNotFoundError,
+            SchemaValidationError,
+            ConfirmationRequiredError,
+            ToolInvocationError,
+            UnauthorizedError,
+        ) as exc:
+            logger.exception("Governed tool '%s' failed", call.name)
+            error = str(exc)
+            return ToolResult(
+                tool_call_id=call.id,
+                name=call.name,
+                content=json.dumps({"error": error}),
+                success=False,
+                error=error,
+            )
 
     # ------------------------------------------------------------------
     # Persistence helpers (durable writes go through Phase-2 services)
@@ -436,8 +583,12 @@ class ChatRuntimeService:
                         "tool_call",
                         {"id": call.id, "name": call.name, "arguments": call.arguments},
                     )
-                    result = await execute_tool_call(
-                        self.tools, call, allowed=config.allowed_tools
+                    result = await self._invoke_tool(
+                        org_id=org_id,
+                        principal_id=principal_id,
+                        correlation_id=correlation_id,
+                        call=call,
+                        allowed=config.allowed_tools,
                     )
                     tool_call_records.append(
                         {
