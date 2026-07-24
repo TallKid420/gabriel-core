@@ -1,10 +1,12 @@
 """roll_dice — roll one or more dice."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 import random
 
 
+@tool
 async def roll_dice(sides: int = 6, count: int = 1) -> dict:
     """Roll one or more dice with a given number of sides.
 

@@ -28,10 +28,13 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from gabriel.gateway.providers.base import ToolCallRequest
 from gabriel.logging_config import get_logger
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from langchain_core.tools import BaseTool
 
 logger = get_logger(__name__)
 
@@ -148,6 +151,49 @@ class FunctionTool(RuntimeTool):
         )
 
 
+@dataclass
+class LangChainTool(RuntimeTool):
+    """Adapt a LangChain ``@tool``-decorated object into a :class:`RuntimeTool`.
+
+    The agent invokes the tool directly through LangChain
+    (``lc_tool.ainvoke(args)``) rather than through the OpenAI function-spec
+    bridge. Governed metadata (safety level and GRN) rides alongside the tool
+    so the runtime can gate ``REQUIRES_CONFIRMATION`` tools without deleting
+    the governance layer.
+    """
+
+    lc_tool: "BaseTool"
+    safety_level: int = 0
+    tool_grn: str | None = None
+    _parameters_override: dict[str, Any] | None = None
+
+    @property
+    def name(self) -> str:
+        return self.lc_tool.name
+
+    @property
+    def description(self) -> str:
+        return self.lc_tool.description or self.lc_tool.name
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        if self._parameters_override is not None:
+            return self._parameters_override
+        from gabriel.tool.discovery import _lc_parameters
+
+        return _lc_parameters(self.lc_tool)
+
+    @property
+    def requires_confirmation(self) -> bool:
+        return self.safety_level == 1
+
+    async def run(self, **kwargs: Any) -> dict[str, Any]:
+        result = await self.lc_tool.ainvoke(kwargs)
+        if isinstance(result, dict):
+            return result
+        return {"result": result}
+
+
 class RuntimeToolRegistry:
     """Named registry of runtime tools, exported to providers as LLM specs."""
 
@@ -198,18 +244,33 @@ def build_default_tool_registry() -> RuntimeToolRegistry:
     points) instead of a hard-coded tool list, so newly added library tools
     are exposed automatically without touching this module.
     """
+    from langchain_core.tools import BaseTool
+
     from gabriel.tool.discovery import tool_indexer
 
     registry = RuntimeToolRegistry()
     for discovered in tool_indexer.discover():
-        registry.register(
-            FunctionTool(
-                _name=discovered.name,
-                _description=discovered.description,
-                _fn=discovered.fn,
-                _parameters=discovered.parameters,
+        fn = discovered.fn
+        if isinstance(fn, BaseTool):
+            # Register the LangChain tool object directly so the agent invokes
+            # it via ``tool.invoke(...)`` / ``tool.ainvoke(...)``.
+            registry.register(
+                LangChainTool(
+                    lc_tool=fn,
+                    safety_level=int(discovered.safety_level),
+                    tool_grn=str(discovered.grn),
+                    _parameters_override=discovered.parameters,
+                )
             )
-        )
+        else:  # pragma: no cover - legacy/raw callables
+            registry.register(
+                FunctionTool(
+                    _name=discovered.name,
+                    _description=discovered.description,
+                    _fn=fn,
+                    _parameters=discovered.parameters,
+                )
+            )
     return registry
 
 

@@ -1,10 +1,12 @@
 """encode_base64 — encode a UTF-8 string to Base64."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 import base64
 
 
+@tool
 async def encode_base64(text: str) -> dict:
     """Encode a UTF-8 string to Base64.
 

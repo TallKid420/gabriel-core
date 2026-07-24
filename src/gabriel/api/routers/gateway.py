@@ -46,6 +46,15 @@ class ChatTurnRequest(BaseModel):
     provider: str | None = None
 
 
+class ToolApprovalRequest(BaseModel):
+    """User's accept/deny decision for a paused, confirmation-gated tool call."""
+
+    session_id: str = Field(min_length=1)
+    tool_name: str = Field(min_length=1)
+    approved: bool
+    deny_reason: str | None = None
+
+
 @router.post("/chat/stream")
 async def stream_chat(
     body: ChatTurnRequest,
@@ -90,6 +99,37 @@ async def chat(
     except ChatRuntimeError as exc:
         status = 502 if "reach" in str(exc).lower() else 422
         raise GabrielAPIError(str(exc), status_code=status) from exc
+
+
+@router.post("/chat/approval")
+async def submit_tool_approval(
+    body: ToolApprovalRequest,
+    context: ExecutionContext = Depends(get_execution_context),
+    runtime: ChatRuntimeService = Depends(get_chat_runtime_service),
+):
+    """Accept or deny a paused, confirmation-gated tool call.
+
+    Resumes the streaming chat turn that emitted a ``tool_approval_required``
+    event: on accept the tool executes; on deny the model receives an
+    informative message and continues without running the tool.
+    """
+    session = runtime.sessions.get(body.session_id)
+    if session is None or session.org_id != context.organization:
+        raise GabrielAPIError(
+            f"Session {body.session_id} not found", status_code=404
+        )
+    resumed = runtime.submit_approval(
+        session_id=body.session_id,
+        tool_name=body.tool_name,
+        approved=body.approved,
+        deny_reason=body.deny_reason,
+    )
+    return {
+        "session_id": body.session_id,
+        "tool_name": body.tool_name,
+        "approved": body.approved,
+        "resumed": resumed,
+    }
 
 
 @router.get("/providers")

@@ -28,7 +28,9 @@ import importlib
 import inspect
 import pkgutil
 from importlib.metadata import entry_points
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
+
+from langchain_core.tools import BaseTool
 
 from gabriel.logging_config import get_logger
 from gabriel.resource.grn import GRN
@@ -95,6 +97,48 @@ def _parameters_schema(fn: Callable[..., Any]) -> dict[str, Any]:
     return {"type": "object", "properties": properties, "required": required}
 
 
+def _lc_parameters(lc_tool: BaseTool) -> dict[str, Any]:
+    """Derive an OpenAI-style JSON Schema from a LangChain tool's args schema.
+
+    Underscore-prefixed / executor-injected arguments are already excluded by
+    the ``@tool`` decorator, so the schema only ever exposes LLM-facing args.
+    """
+    args_schema = getattr(lc_tool, "args_schema", None)
+    if args_schema is None:
+        return {"type": "object", "properties": {}, "required": []}
+    try:
+        schema = args_schema.model_json_schema()  # pydantic v2
+    except AttributeError:  # pragma: no cover - defensive
+        return {"type": "object", "properties": {}, "required": []}
+    return {
+        "type": "object",
+        "properties": schema.get("properties", {}),
+        "required": schema.get("required", []),
+    }
+
+
+def lc_tool_to_async_callable(
+    lc_tool: BaseTool,
+) -> Callable[..., Awaitable[dict[str, Any]]]:
+    """Adapt a LangChain tool into the ``async fn(**kwargs) -> dict`` shape the
+    :class:`~gabriel.tool.executor.ToolExecutor` and
+    :class:`~gabriel.tool.registry.FunctionRegistry` expect.
+
+    The adapter invokes the tool through LangChain (``ainvoke``) so all runtime
+    dispatch flows through the LangChain tool object rather than the raw
+    callable.
+    """
+
+    async def _invoke(**kwargs: Any) -> dict[str, Any]:
+        result = await lc_tool.ainvoke(kwargs)
+        if isinstance(result, dict):
+            return result
+        return {"result": result}
+
+    _invoke.__name__ = getattr(lc_tool, "name", "lc_tool")
+    return _invoke
+
+
 class ToolLibraryIndexer:
     """Discovers tool implementations from the library package and entry points."""
 
@@ -123,8 +167,17 @@ class ToolLibraryIndexer:
         for tool in self.discover(force=force):
             if tool.fn is None:
                 continue
-            if not fn_registry.is_registered(tool.runtime_binding):
-                fn_registry.register(binding=tool.runtime_binding, fn=tool.fn)
+            if fn_registry.is_registered(tool.runtime_binding):
+                continue
+            # ``tool.fn`` is a LangChain tool object; register an async adapter
+            # so the ToolExecutor can dispatch it via ``await fn(**kwargs)``
+            # (which invokes the tool through LangChain under the hood).
+            callable_fn = (
+                lc_tool_to_async_callable(tool.fn)
+                if isinstance(tool.fn, BaseTool)
+                else tool.fn
+            )
+            fn_registry.register(binding=tool.runtime_binding, fn=callable_fn)
 
     # ------------------------------------------------------------------
     # Discovery sources
@@ -161,16 +214,17 @@ class ToolLibraryIndexer:
                 grn = GRN(org_id=org_id, resource_id=tool_name, resource_type="tool")
 
                 fn = getattr(module, tool_name, None)
-                if fn is None or not inspect.iscoroutinefunction(fn):
+                # Tools are LangChain ``@tool``-decorated objects (BaseTool).
+                if not isinstance(fn, BaseTool):
                     continue
-            
+
                 tools[tool_name] = Tool(
                     grn=grn,  # GRN is assigned later when syncing to governance
                     org_id="",  # Org ID is assigned later when syncing to governance
                     name=tool_name,
-                    description=_short_description(fn),
+                    description=fn.description or _short_description(fn),
                     category=category,
-                    parameters=_parameters_schema(fn),
+                    parameters=_lc_parameters(fn),
                     safety_level=SafetyLevel.SAFE,  # Default safety level; can be updated later
                     runtime_binding=binding,
                     execution_runtime=ExecutionRuntime.LOCAL,
@@ -199,14 +253,20 @@ class ToolLibraryIndexer:
                     "Failed to load tool entry point '%s'", ep.name, exc_info=True
                 )
                 continue
-            if not inspect.iscoroutinefunction(fn):
-                logger.warning(
-                    "Entry point '%s' does not resolve to an async callable; skipping",
-                    ep.name,
-                )
-                continue
+            # Accept either a LangChain tool object or a bare async callable
+            # (wrapped into a LangChain tool for a uniform runtime contract).
+            if not isinstance(fn, BaseTool):
+                if inspect.iscoroutinefunction(fn):
+                    from langchain_core.tools import tool as _lc_tool
 
-            
+                    fn = _lc_tool(fn)
+                else:
+                    logger.warning(
+                        "Entry point '%s' does not resolve to a LangChain tool "
+                        "or async callable; skipping",
+                        ep.name,
+                    )
+                    continue
 
             category = ToolCategory.CUSTOM
             binding = ep.name
@@ -215,14 +275,13 @@ class ToolLibraryIndexer:
                 grn=GRN(org_id="", resource_id=ep.name, resource_type="tool"),
                 org_id="",  # Org ID is assigned later when syncing to governance
                 name=ep.name,
-                description=_short_description(fn),
+                description=fn.description or _short_description(fn),
                 category=category,
-                parameters=_parameters_schema(fn),
+                parameters=_lc_parameters(fn),
                 safety_level=SafetyLevel.SAFE,  # Default safety level; can be updated later
                 runtime_binding=binding,
                 execution_runtime=ExecutionRuntime.LOCAL,
-                # description=_short_description(fn),
-                # parameters=_parameters_schema(fn),
+                fn=fn,
                 created_by="system",
                 updated_by="system",
             )

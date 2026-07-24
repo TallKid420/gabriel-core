@@ -1,10 +1,12 @@
 """list_events — list upcoming calendar events."""
 from __future__ import annotations
+from langchain_core.tools import tool
 from datetime import datetime, timezone
 from typing import Any
 from gabriel.tool.library.calendar._calendar_client import build_calendar_service
 
 
+@tool
 async def list_events(
     calendar_id: str = "primary",
     max_results: int = 10,

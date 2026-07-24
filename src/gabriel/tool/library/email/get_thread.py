@@ -1,9 +1,11 @@
 """get_thread — retrieve all emails in a thread by matching subject."""
 from __future__ import annotations
+from langchain_core.tools import tool
 from typing import Any
 from gabriel.tool.library.email._email_client import EmailClient
 
 
+@tool
 async def get_thread(
     email_id: str,
     _credentials: dict[str, Any] | None = None,

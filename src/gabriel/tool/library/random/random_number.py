@@ -1,10 +1,12 @@
 """random_number — generate a random float in a range."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 import random
 
 
+@tool
 async def random_number(min_value: float = 0, max_value: float = 100) -> dict:
     """Generate a random float between min_value and max_value.
 

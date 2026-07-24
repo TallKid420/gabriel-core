@@ -1,10 +1,12 @@
 """hash_text — hash a string using a standard algorithm."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 import hashlib
 
 
+@tool
 async def hash_text(text: str, algorithm: str = "sha256") -> dict:
     """Hash a string using md5, sha1, or sha256.
 

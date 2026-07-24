@@ -1,10 +1,12 @@
 """find_free_slot — find the next free time slot in Google Calendar."""
 from __future__ import annotations
+from langchain_core.tools import tool
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from gabriel.tool.library.calendar._calendar_client import build_calendar_service
 
 
+@tool
 async def find_free_slot(
     duration_minutes: int = 60,
     calendar_id: str = "primary",

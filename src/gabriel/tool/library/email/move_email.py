@@ -1,9 +1,11 @@
 """move_email — move an email to another IMAP folder."""
 from __future__ import annotations
+from langchain_core.tools import tool
 from typing import Any
 from gabriel.tool.library.email._email_client import EmailClient
 
 
+@tool
 async def move_email(
     email_id: str,
     destination: str,

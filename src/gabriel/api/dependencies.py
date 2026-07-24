@@ -431,6 +431,12 @@ async def initialize_gateway_state(app) -> None:
         app.state.runtime_tool_registry = build_default_tool_registry()
         app.state.fn_registry = function_registry
         app.state.chat_session_manager = SessionManager()
+        # App-wide rendezvous for human-in-the-loop tool approvals: shared by
+        # the streaming chat turn (which pauses) and the approval endpoint
+        # (which resumes it). Must be a single instance across requests.
+        from gabriel.gateway.approvals import ApprovalRegistry
+
+        app.state.approval_registry = ApprovalRegistry()
 
         # Document & Knowledge (Phase 4): hot-swappable embedding providers
         # (Ollama default) and the RAG retriever used by the chat runtime.
@@ -522,6 +528,7 @@ def get_chat_runtime_service(request: Request):
                 retriever=get_knowledge_retriever(request),
                 fn_registry=request.app.state.fn_registry,
                 peel=request.app.state.peel,
+                approvals=getattr(request.app.state, "approval_registry", None),
         )
 
 

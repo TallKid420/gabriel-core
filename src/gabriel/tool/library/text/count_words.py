@@ -1,10 +1,12 @@
 """count_words — count words, characters, and sentences in a block of text."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 import re
 
 
+@tool
 async def count_words(text: str) -> dict:
     """Count words, characters, and sentences in a block of text.
 
