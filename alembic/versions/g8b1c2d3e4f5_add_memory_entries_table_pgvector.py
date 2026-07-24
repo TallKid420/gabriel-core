@@ -28,8 +28,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 1. Enable pgvector extension
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # Detect dialect to handle SQLite vs PostgreSQL differences
+    bind = op.get_bind()
+    is_postgresql = bind.dialect.name == "postgresql"
+    
+    # 1. Enable pgvector extension (PostgreSQL only)
+    if is_postgresql:
+        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     # 2. Create memory_entries table
     op.create_table(
@@ -47,16 +52,22 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("now()"),
+            server_default=sa.text("now()") if is_postgresql else sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
     )
 
-    # 3. Add embedding column as pgvector type (1536 dims = OpenAI text-embedding-3-small)
+    # 3. Add embedding column as pgvector type (PostgreSQL) or JSON fallback (SQLite)
     #    Using raw DDL because SQLAlchemy doesn't know the vector type without pgvector lib.
-    op.execute(
-        "ALTER TABLE memory_entries ADD COLUMN embedding vector(1536)"
-    )
+    if is_postgresql:
+        op.execute(
+            "ALTER TABLE memory_entries ADD COLUMN embedding vector(1536)"
+        )
+    else:
+        # SQLite: store embedding as JSON array (no vector similarity index support)
+        op.execute(
+            "ALTER TABLE memory_entries ADD COLUMN embedding TEXT"
+        )
 
     # 4. Standard indexes for tenant-scoped lookups
     op.create_index("ix_memory_entries_org_id", "memory_entries", ["org_id"])
@@ -66,15 +77,16 @@ def upgrade() -> None:
         "ix_memory_entries_agent_layer", "memory_entries", ["agent_id", "layer"]
     )
 
-    # 5. HNSW index for approximate nearest-neighbor search on the embedding column.
+    # 5. HNSW index for approximate nearest-neighbor search on the embedding column (PostgreSQL only).
     #    ivfflat is also valid; HNSW has better recall and no training step.
-    op.execute(
-        """
-        CREATE INDEX ix_memory_entries_embedding_hnsw
-        ON memory_entries
-        USING hnsw (embedding vector_cosine_ops)
-        """
-    )
+    if is_postgresql:
+        op.execute(
+            """
+            CREATE INDEX ix_memory_entries_embedding_hnsw
+            ON memory_entries
+            USING hnsw (embedding vector_cosine_ops)
+            """
+        )
 
 
 def downgrade() -> None:

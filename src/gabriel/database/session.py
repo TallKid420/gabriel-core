@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
@@ -5,7 +6,12 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from gabriel.database.base import Base  # single source of truth for metadata
 from gabriel.logging_config import configure_logging
 
-DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost/gabriel_core"
+# Allow environment override; default to SQLite for local dev (aligns with fallback).
+# Production deployments should set GABRIEL_DATABASE_URL to a real Postgres DSN.
+DATABASE_URL = os.getenv(
+    "GABRIEL_DATABASE_URL",
+    "sqlite+aiosqlite:///./.gabriel/gabriel.db",
+)
 
 configure_logging()
 

@@ -49,6 +49,25 @@ target_metadata = Base.metadata
 # ... etc.
 
 
+def _get_alembic_url() -> str:
+    """Resolve database URL for alembic (sync driver required).
+    
+    Alembic requires a synchronous database URL. If GABRIEL_DATABASE_URL is set
+    and uses async drivers (sqlite+aiosqlite, postgresql+asyncpg), convert to sync.
+    """
+    url = os.getenv("GABRIEL_DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    if not url:
+        # Default to SQLite for local dev
+        return "sqlite:///./.gabriel/gabriel.db"
+    
+    # Convert async drivers to sync for alembic compatibility
+    # sqlite+aiosqlite:///path -> sqlite:///path (remove "+aiosqlite" only)
+    url = url.replace("sqlite+aiosqlite://", "sqlite://")
+    url = url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+    
+    return url
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -61,13 +80,15 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = _get_alembic_url()
+    
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=False,
         dialect_opts={"paramstyle": "named"},
+        render_as_batch=True,  # Required for SQLite ALTER TABLE support
     )
 
     with context.begin_transaction():
@@ -81,17 +102,23 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # Resolve URL (with sync driver conversion if needed)
+    configuration = config.get_section(config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = _get_alembic_url()
+    
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
 
     with connectable.connect() as connection:
+        # Enable batch mode for SQLite compatibility
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             compare_type=False,
+            render_as_batch=True,
         )
 
         with context.begin_transaction():
