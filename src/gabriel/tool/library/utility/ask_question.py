@@ -6,8 +6,10 @@ before continuing the workflow.
 """
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 
+@tool
 async def ask_question(question: str, context: str = "") -> dict:
     """Pause the workflow and ask the user a question.
 

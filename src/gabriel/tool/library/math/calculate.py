@@ -1,10 +1,12 @@
 """calculate — safely evaluate a mathematical expression."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 import math
 
 
+@tool
 async def calculate(expression: str) -> dict:
     """Safely evaluate a mathematical expression.
 

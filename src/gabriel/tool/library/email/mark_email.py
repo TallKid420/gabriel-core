@@ -1,9 +1,11 @@
 """mark_email — mark an email as read or unread."""
 from __future__ import annotations
+from langchain_core.tools import tool
 from typing import Any
 from gabriel.tool.library.email._email_client import EmailClient
 
 
+@tool
 async def mark_email(
     email_id: str,
     read: bool = True,

@@ -1,9 +1,11 @@
 """search_emails — search the inbox using an IMAP TEXT query."""
 from __future__ import annotations
+from langchain_core.tools import tool
 from typing import Any
 from gabriel.tool.library.email._email_client import EmailClient
 
 
+@tool
 async def search_emails(
     query: str,
     _credentials: dict[str, Any] | None = None,

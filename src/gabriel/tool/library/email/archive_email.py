@@ -1,9 +1,11 @@
 """archive_email — remove an email from the inbox."""
 from __future__ import annotations
+from langchain_core.tools import tool
 from typing import Any
 from gabriel.tool.library.email._email_client import EmailClient
 
 
+@tool
 async def archive_email(
     email_id: str,
     _credentials: dict[str, Any] | None = None,

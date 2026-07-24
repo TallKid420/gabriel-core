@@ -1,8 +1,10 @@
 """list_tools — enumerate registered tool bindings from the FunctionRegistry."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 
+@tool
 async def list_tools() -> dict:
     """List all currently registered tool runtime bindings.
 

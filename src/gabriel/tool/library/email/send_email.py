@@ -1,10 +1,12 @@
 """send_email — send an email via SMTP."""
 from __future__ import annotations
+from langchain_core.tools import tool
 from email.message import EmailMessage
 from typing import Any
 from gabriel.tool.library.email._email_client import EmailClient
 
 
+@tool
 async def send_email(
     to: str,
     subject: str,

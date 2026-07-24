@@ -1,10 +1,12 @@
 """random_choice — pick a random element from a list."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 import random
 
 
+@tool
 async def random_choice(items: list) -> dict:
     """Pick a random element from a list.
 

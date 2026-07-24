@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from langchain_core.tools import tool
+
 INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -46,6 +48,7 @@ OUTPUT_SCHEMA: dict[str, Any] = {
 }
 
 
+@tool
 def decline_invitation(
     event_id: str,
     calendar_id: str = "primary",

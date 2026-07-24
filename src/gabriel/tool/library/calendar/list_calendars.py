@@ -1,9 +1,11 @@
 """list_calendars — list all calendars accessible to the org's Google account."""
 from __future__ import annotations
+from langchain_core.tools import tool
 from typing import Any
 from gabriel.tool.library.calendar._calendar_client import build_calendar_service
 
 
+@tool
 async def list_calendars(_credentials: dict[str, Any] | None = None) -> dict:
     """List all Google Calendars accessible to the org.
 

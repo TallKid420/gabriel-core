@@ -1,9 +1,11 @@
 """accept_invitation — accept a Google Calendar event invitation."""
 from __future__ import annotations
+from langchain_core.tools import tool
 from typing import Any
 from gabriel.tool.library.calendar._calendar_client import build_calendar_service
 
 
+@tool
 async def accept_invitation(
     event_id: str,
     calendar_id: str = "primary",

@@ -1,10 +1,12 @@
 """get_time — return the current time in a given timezone."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 from datetime import datetime
 
 
+@tool
 async def get_time(timezone: str = "UTC") -> dict:
     """Return the current ISO-8601 timestamp in the requested timezone.
 

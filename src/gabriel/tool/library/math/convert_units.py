@@ -1,8 +1,10 @@
 """convert_units — convert between common units of measurement."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 
+@tool
 async def convert_units(value: float, from_unit: str, to_unit: str) -> dict:
     """Convert between common units of temperature, length, weight, and speed.
 

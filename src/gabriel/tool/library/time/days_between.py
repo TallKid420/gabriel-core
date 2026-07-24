@@ -1,10 +1,12 @@
 """days_between — return the number of days between two ISO dates."""
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 from datetime import date
 
 
+@tool
 async def days_between(date1: str, date2: str) -> dict:
     """Return the number of calendar days between two ISO-8601 dates.
 

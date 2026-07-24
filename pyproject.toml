@@ -17,6 +17,7 @@ dependencies = [
     "sqlalchemy[asyncio]",
     "asyncpg",
     "langgraph",
+    "langchain-core",
     "python-multipart",
     "pgvector",
     "rich",

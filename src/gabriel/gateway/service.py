@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -40,6 +40,7 @@ from gabriel.conversation.message_service import ConversationClosedError, Messag
 from gabriel.conversation.models import Conversation
 from gabriel.conversation.service import ConversationService
 from gabriel.events.repository import EventRepository
+from gabriel.gateway.approvals import ApprovalDecision, ApprovalRegistry
 from gabriel.gateway.prompt import DEFAULT_CONTEXT_WINDOW, ContextBlock, PromptAssembler
 from gabriel.gateway.providers.base import (
     ChatMessage,
@@ -68,6 +69,7 @@ from gabriel.tool.exceptions import (
 )
 from gabriel.tool.executor import ToolExecutor
 from gabriel.tool.mappers import orm_to_domain as tool_orm_to_domain
+from gabriel.tool.models import SafetyLevel
 from gabriel.tool.registry import FunctionRegistry
 from gabriel.tool.repository import ToolRepository
 from gabriel.tool.service import ToolService
@@ -95,6 +97,9 @@ class AgentRuntimeConfig:
     context_window: int = DEFAULT_CONTEXT_WINDOW
     knowledge_sources: tuple[str, ...] = ()
     document_collections: tuple[str, ...] = ()
+    # Map of tool name -> SafetyLevel int for tools exposed this turn. Drives
+    # the human-in-the-loop approval gate for REQUIRES_CONFIRMATION tools.
+    tool_safety: dict[str, int] = field(default_factory=dict)
 
     def grounding_sources(self) -> list[str]:
         """Deduplicated GRNs used for retrieval grounding this turn."""
@@ -126,6 +131,7 @@ class ChatRuntimeService:
         peel: PEEL,
         prompt_assembler: PromptAssembler | None = None,
         retriever: "KnowledgeRetriever | None" = None,
+        approvals: ApprovalRegistry | None = None,
         max_tool_iterations: int = MAX_TOOL_ITERATIONS,
     ) -> None:
         self._session_factory = session_factory
@@ -136,7 +142,32 @@ class ChatRuntimeService:
         self.peel = peel
         self.prompt = prompt_assembler or PromptAssembler()
         self.retriever = retriever
+        # Shared, app-wide rendezvous for human-in-the-loop tool approvals.
+        self.approvals = approvals or ApprovalRegistry()
         self.max_tool_iterations = max_tool_iterations
+
+    # ------------------------------------------------------------------
+    # Human-in-the-loop approval
+    # ------------------------------------------------------------------
+
+    def submit_approval(
+        self,
+        *,
+        session_id: str,
+        tool_name: str,
+        approved: bool,
+        deny_reason: str | None = None,
+    ) -> bool:
+        """Record a user's accept/deny decision for a paused tool call.
+
+        Returns ``True`` if a matching pending approval was found and resumed,
+        ``False`` otherwise (e.g. the stream already timed out).
+        """
+        return self.approvals.resolve(
+            session_id,
+            tool_name,
+            ApprovalDecision(approved=approved, deny_reason=deny_reason),
+        )
 
     # ------------------------------------------------------------------
     # Configuration resolution
@@ -185,6 +216,7 @@ class ChatRuntimeService:
         temperature = 0.0
         max_tokens: int | None = None
         allowed_tools: list[str] = []
+        tool_safety: dict[str, int] = {}
         knowledge_sources: tuple[str, ...] = ()
         document_collections: tuple[str, ...] = ()
 
@@ -202,6 +234,7 @@ class ChatRuntimeService:
             # enabled Tool resource for the org, and allowed by the agent
             # specification. See ``_resolve_allowed_tools`` for details.
             allowed_tools = await self._resolve_allowed_tools(session, spec, org_id)
+            tool_safety = await self._org_tool_safety(session, org_id)
             knowledge_sources = tuple(spec.knowledge_sources or ())
             document_collections = tuple(spec.document_collections or ())
 
@@ -218,6 +251,7 @@ class ChatRuntimeService:
             temperature=temperature,
             max_tokens=max_tokens,
             allowed_tools=allowed_tools,
+            tool_safety=tool_safety,
             knowledge_sources=knowledge_sources,
             document_collections=document_collections,
         )
@@ -267,6 +301,31 @@ class ChatRuntimeService:
             )
             return set()
         return {tool_orm_to_domain(orm).name for orm in orms if orm.enabled}
+
+    async def _org_tool_safety(
+        self, session: AsyncSession, org_id: str
+    ) -> dict[str, int]:
+        """Map of enabled tool name -> safety level int for the org.
+
+        Powers the human-in-the-loop approval gate: the streaming loop consults
+        this map to decide whether a model-requested tool must pause for
+        explicit user confirmation before dispatch. Fail-secure: on lookup
+        failure returns an empty map (tools then default to SAFE handling, but
+        the governed :class:`ToolExecutor` still enforces its own confirmation
+        gate on dispatch).
+        """
+        try:
+            orms = await ToolRepository(session).list_for_org(org_id)
+        except Exception:  # noqa: BLE001 - fail-secure
+            logger.exception("Tool safety lookup failed for org %s", org_id)
+            return {}
+        safety: dict[str, int] = {}
+        for orm in orms:
+            if not orm.enabled:
+                continue
+            tool = tool_orm_to_domain(orm)
+            safety[tool.name] = int(tool.safety_level)
+        return safety
 
     # ------------------------------------------------------------------
     # Governed tool execution (ADR-003 events, ADR-019 PEEL, ADR-024 schema)
@@ -338,6 +397,7 @@ class ChatRuntimeService:
         correlation_id: str | None,
         call: ToolCallRequest,
         allowed: list[str],
+        confirmed: bool = False,
     ) -> ToolResult:
         """Execute one model-requested tool call via the governed
         :class:`gabriel.tool.executor.ToolExecutor`, never raising.
@@ -363,7 +423,9 @@ class ChatRuntimeService:
                 event_repo = EventRepository(session)
                 tool_service = ToolService(ToolRepository(session), event_repo)
                 executor = ToolExecutor(tool_service, self.fn_registry, self.peel, event_repo)
-                result = await executor.invoke(context, grn, call.arguments)
+                result = await executor.invoke(
+                    context, grn, call.arguments, confirmed=confirmed
+                )
             return ToolResult(
                 tool_call_id=call.id,
                 name=call.name,
@@ -583,19 +645,74 @@ class ChatRuntimeService:
                         "tool_call",
                         {"id": call.id, "name": call.name, "arguments": call.arguments},
                     )
-                    result = await self._invoke_tool(
-                        org_id=org_id,
-                        principal_id=principal_id,
-                        correlation_id=correlation_id,
-                        call=call,
-                        allowed=config.allowed_tools,
+
+                    # Human-in-the-loop gate: tools declared
+                    # REQUIRES_CONFIRMATION pause the loop until the user
+                    # accepts or denies via POST /gateway/chat/approval.
+                    requires_confirmation = (
+                        config.tool_safety.get(call.name)
+                        == SafetyLevel.REQUIRES_CONFIRMATION.value
                     )
+                    confirmed = False
+                    denied_decision: ApprovalDecision | None = None
+                    if requires_confirmation:
+                        grn = tool_grn(call.name, org_id, version=1)
+                        key = self.approvals.register(
+                            chat_session.session_id, call.name
+                        )
+                        yield sse_event(
+                            "tool_approval_required",
+                            {
+                                "id": call.id,
+                                "tool_name": call.name,
+                                "args": call.arguments,
+                                "tool_grn": grn,
+                                "session_id": chat_session.session_id,
+                            },
+                        )
+                        decision = await self.approvals.wait(key)
+                        if decision.approved:
+                            confirmed = True
+                        else:
+                            denied_decision = decision
+
+                    if denied_decision is not None:
+                        # Deny path: skip execution and inject an informative
+                        # ToolMessage so the LLM can adjust its response.
+                        reason = denied_decision.deny_reason
+                        denial_text = (
+                            f"User denied execution of tool '{call.name}'. "
+                            "The user chose not to allow this action. "
+                            "Please acknowledge this and adjust your response "
+                            "accordingly."
+                        )
+                        if reason:
+                            denial_text += f" Reason provided: {reason}"
+                        result = ToolResult(
+                            tool_call_id=call.id,
+                            name=call.name,
+                            content=json.dumps(
+                                {"denied": True, "message": denial_text}
+                            ),
+                            success=False,
+                            error="denied_by_user",
+                        )
+                    else:
+                        result = await self._invoke_tool(
+                            org_id=org_id,
+                            principal_id=principal_id,
+                            correlation_id=correlation_id,
+                            call=call,
+                            allowed=config.allowed_tools,
+                            confirmed=confirmed,
+                        )
                     tool_call_records.append(
                         {
                             "id": call.id,
                             "name": call.name,
                             "arguments": call.arguments,
                             "success": result.success,
+                            "denied": denied_decision is not None,
                         }
                     )
                     yield sse_event(
@@ -604,6 +721,7 @@ class ChatRuntimeService:
                             "id": call.id,
                             "name": call.name,
                             "success": result.success,
+                            "denied": denied_decision is not None,
                             "content": result.content,
                         },
                     )
@@ -626,6 +744,7 @@ class ChatRuntimeService:
                             "tool_name": call.name,
                             "tool_call_id": call.id,
                             "success": result.success,
+                            "denied": denied_decision is not None,
                         },
                         correlation_id=correlation_id,
                     )

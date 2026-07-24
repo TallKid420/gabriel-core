@@ -8,12 +8,14 @@ Org-scoped: the search is restricted to the calling principal's organization.
 """
 
 from __future__ import annotations
+from langchain_core.tools import tool
 
 from gabriel.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
+@tool
 async def semantic_search(
     query: str,
     limit: int = 5,
